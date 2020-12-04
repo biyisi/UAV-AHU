@@ -1,0 +1,8 @@
+query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.44097424]; 
+query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.3562372]; 
+query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.52969563]; 
+query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.39619294]; 
+query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.46413893]; 
+query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.50999117]; 
+query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.5551244]; 
+query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.4665854]; 
