@@ -6,11 +6,11 @@ import time
 import numpy as np
 
 pwd = os.path.abspath(os.curdir)  # 当前文件夹：./data/
-print('当前文件夹：', pwd)
-data_set_list = os.listdir('./data/Street')  # 所有数据文件夹列表：00 01 02 ...
+# print('当前文件夹：', pwd)
+# data_set_list = os.listdir('./data/Satellite')  # 所有数据文件夹列表：00 01 02 ...
 # data_set_list.remove('hehe.py')  # 删除该文件本身
 # os.mkdir('./test')  # 创建目标文件夹
-print('所有图片文件夹列表：', data_set_list)
+# print('所有图片文件夹列表：', data_set_list)
 
 
 def cv_resize_image(path, image):
@@ -19,6 +19,7 @@ def cv_resize_image(path, image):
     img = Image.open(image_path)
     img_npy = np.array(img)
     new_img_npy = img_npy[112: 400, :, :]
+    # new_img_npy = img_npy
     new_img = Image.fromarray(new_img_npy).convert('RGB')
     img_cv = cv2.cvtColor(np.asarray(new_img), cv2.COLOR_RGB2BGR)
     new_image = cv2.resize(img_cv, (512, 512), interpolation=cv2.INTER_CUBIC)
@@ -26,20 +27,58 @@ def cv_resize_image(path, image):
     # cv2.waitKey()
     return new_image
 
-# cnt = 0
-for data_set in data_set_list:
-    # print(data_set)
-    path = pwd + '/data/Street/' + data_set  # ./data/train/drone/00
+def pi(data_set):
+    path = '/home/biyisi/图片/1206/' + data_set  # ./data/train/drone/00
     print('path =', path)
     image_set = os.listdir(path)  # 图片列表：image1 image2 ...
     print('图片列表：', len(image_set))
     for image in image_set:
         print(image)
         new_image = cv_resize_image(path, image)
-        obj_dir = '/home/biyisi/PycharmProjects/pythonProject/data/new_street/' + data_set + '/'
+        # obj_dir = '/home/biyisi/PycharmProjects/pythonProject/data/new_satellite/' + data_set + '/'
+        obj_dir = '/home/biyisi/图片/1206/19/'
         print("obj_dir =", obj_dir)
-        cv2.imwrite(obj_dir+image, new_image)
+        cv2.imwrite(obj_dir + image, new_image)
         time.sleep(0.1)
+
+pi('19_1206')
+# pi('00')
+# pi('01')
+# pi('02')
+# pi('03')
+# pi('04')
+# pi('05')
+# pi('06')
+# pi('07')
+# pi('08')
+# pi('09')
+# pi('10')
+# pi('11')
+# pi('12')
+# pi('13')
+# pi('14')
+# pi('15')
+# pi('16')
+# pi('17')
+# pi('18')
+# pi('19')
+# pi('20')
+
+
+# cnt = 0
+# for data_set in data_set_list:
+#     # print(data_set)
+#     path = pwd + '/data/Street/' + data_set  # ./data/train/drone/00
+#     print('path =', path)
+#     image_set = os.listdir(path)  # 图片列表：image1 image2 ...
+#     print('图片列表：', len(image_set))
+#     for image in image_set:
+#         print(image)
+#         new_image = cv_resize_image(path, image)
+#         obj_dir = '/home/biyisi/PycharmProjects/pythonProject/data/new_street/' + data_set + '/'
+#         print("obj_dir =", obj_dir)
+#         cv2.imwrite(obj_dir+image, new_image)
+#         time.sleep(0.1)
 
     # cnt += len(image_set)
 # print(cnt)

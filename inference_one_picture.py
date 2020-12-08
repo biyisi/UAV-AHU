@@ -102,14 +102,16 @@ def get_labels_paths(img_path):
     return labels, paths
 
 
-def load_train_model(opt, image_datasets):
-    print("-----------Test: Load Collected data Trained model-----------")
-    model, _, epoch = load_network(opt.name, opt)
-    # print("model=",model)
-    model.classifier.classifier = nn.Sequential()
-    model = model.eval()
-    model = model.cuda()
-    return model
+# def load_train_model(opt, image_datasets):
+#     print("-----------Test: Load Collected data Trained model-----------")
+#     print("opt.name =", opt.name)
+#     print("opt =", opt)
+#     model, _, epoch = load_network(opt.name, opt)
+#     # print("model=",model)
+#     model.classifier.classifier = nn.Sequential()
+#     model = model.eval()
+#     model = model.cuda()
+#     return model
 
 
 def save_matlab(gallery_feature, gallery_label, gallery_path, query_feature, query_label, query_path):
@@ -130,23 +132,28 @@ def load_image(model, img_path):
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
     image_Tensor = data_transforms(image)
-    print(type(image_Tensor))
-    feature = torch.FloatTensor()
-    ff = torch.FloatTensor(1, 512).zero_().cuda()
-    # input_img = Variable(torch.unsqueeze(image_Tensor.cuda(), dim=0).float(), requires_grad=False)
-    # image_Tensor = flip_horizontal(image_Tensor.cuda())
-    # input_img = Variable(image_Tensor.cuda())
-    for i in range(2):
-        # if (i == 1):
-        #     input_img = Variable(torch.unsqueeze(image_Tensor.cuda(), dim=0).float(), requires_grad=False)
-        input_img = Variable(torch.unsqueeze(image_Tensor.cuda(), dim=0).float(), requires_grad=False)
-        for scale in ms:
-            outputs = model(input_img)
-            ff += outputs
-    fnorm = torch.norm(ff, p=2, dim=1, keepdim=True)
-    ff = ff.div(fnorm.expand_as(ff))
-    feature = torch.cat((feature, ff.data.cpu()), 0)
+
+    input_img = Variable(torch.unsqueeze(image_Tensor.cuda(), dim=0).float(), requires_grad=False)
+    feature = model(input_img)
     return feature
+
+    # print(type(image_Tensor))
+    # feature = torch.FloatTensor()
+    # ff = torch.FloatTensor(1, 512).zero_().cuda()
+    # # input_img = Variable(torch.unsqueeze(image_Tensor.cuda(), dim=0).float(), requires_grad=False)
+    # # image_Tensor = flip_horizontal(image_Tensor.cuda())
+    # # input_img = Variable(image_Tensor.cuda())
+    # for i in range(2):
+    #     # if (i == 1):
+    #     #     input_img = Variable(torch.unsqueeze(image_Tensor.cuda(), dim=0).float(), requires_grad=False)
+    #     input_img = Variable(torch.unsqueeze(image_Tensor.cuda(), dim=0).float(), requires_grad=False)
+    #     for scale in ms:
+    #         outputs = model(input_img)
+    #         ff += outputs
+    # fnorm = torch.norm(ff, p=2, dim=1, keepdim=True)
+    # ff = ff.div(fnorm.expand_as(ff))
+    # feature = torch.cat((feature, ff.data.cpu()), 0)
+    # return feature
 
 
 def cal_score(query_feature, gallery_feature):
@@ -176,22 +183,30 @@ if __name__ == '__main__':
     opt = init_options()
     opt, str_ids, name, test_dir = init_load_train_config(opt)
     ms = choose_gpu(opt, str_ids)
-    model, _, epoch = load_network("drone", opt)
+    model, _, epoch = load_network("view", opt)
     # print("model=",model)
-    model.classifier.classifier = nn.Sequential()
+    # model.classifier.classifier = nn.Sequential()
+    # print("model =", model)
     model = model.eval()
     model = model.cuda()
 
     start_time = time.time()
 
-    query_img_path = './data/new_street/15/image_1.jpg'
+    query_img_path = '/home/biyisi/PycharmProjects/pythonProject/data/test/view/19/1206_19_street_25.jpg'
+    # query_img_path = '/home/biyisi/PycharmProjects/pythonProject/data/test/view/09/DJI_0029.JPG'
     query_feature = load_image(model, query_img_path)
     print("type(query_feature)=", type(query_feature))
+    folder_name = os.path.basename(os.path.dirname(query_img_path))
+    true_query_label = int(folder_name)
+    infer_label = torch.argmax(query_feature, dim=1).cpu().numpy()[0]
+    print("true_query_label =", true_query_label)
+    print("infer_label =", infer_label)
+    # print("feature =", query_feature)
 
-    gallery_img_path = './data/new_street/00/image_1.jpg'
-    gallery_feature = load_image(model, gallery_img_path)
-    print("type(gallery_feature)=", type(gallery_feature))
-    score = cal_score(query_feature, gallery_feature)
+    # gallery_img_path = './data/new_street/00/image_415.jpg'
+    # gallery_feature = load_image(model, gallery_img_path)
+    # print("type(gallery_feature)=", type(gallery_feature))
+    # score = cal_score(query_feature, gallery_feature)
 
     end_time = time.time()
     totaltime = end_time - start_time

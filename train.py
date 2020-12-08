@@ -22,7 +22,7 @@ matplotlib.use('agg')
 # print(torch.__version__)
 torch_version = torch.__version__
 
-TRAIN_FILE_NAME = 'drone'
+TRAIN_FILE_NAME = 'view'
 
 try:
     from apex.fp16_utils import *
@@ -63,7 +63,7 @@ def init_options():
 
 
 def opt_resume(opt):
-    model, opt, start_epoch = utils.load_network(opt.name, opt)
+    model, opt, start_epoch = utils.load_network(opt.name, opt, RESNET152=True, RESNET18=False, VGG19=False)
     return model, opt, start_epoch
 
 
@@ -131,26 +131,26 @@ def init_transform_train_list():
     return transform_train_list
 
 
-def init_transform_val_list():
-    transform_val_list = [
+def init_transform_test_list():
+    transform_test_list = [
         torchvision.transforms.Resize(size=(opt.h, opt.w), interpolation=3),  # Image.BICUBIC
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]
-    return transform_val_list
+    return transform_test_list
 
 
-def init_data_transforms(transform_train_list, transform_val_list):
+def init_data_transforms(transform_train_list, transform_test_list):
     data_transforms = {
         'train': torchvision.transforms.Compose(transform_train_list),
-        'val': torchvision.transforms.Compose(transform_val_list)
+        'test': torchvision.transforms.Compose(transform_test_list)
     }
     return data_transforms
 
 
 def load_data(opt):
     transform_train_list = init_transform_train_list()
-    transform_val_list = init_transform_val_list()
+    transform_test_list = init_transform_test_list()
     if opt.erasing_p > 0:
         transform_train_list = transform_train_list + [RandomErasing(probability=opt.erasing_p, mean=[0.0, 0.0, 0.0])]
     if opt.color_jitter:
@@ -160,7 +160,7 @@ def load_data(opt):
         transform_train_list = [ImageNetPolicy()] + transform_train_list
     # print(transform_train_list)
 
-    data_transforms = init_data_transforms(transform_train_list, transform_val_list)
+    data_transforms = init_data_transforms(transform_train_list, transform_test_list)
     train_all = ''
     if opt.train_all:
         train_all = '_all'
@@ -184,10 +184,10 @@ def load_data(opt):
 def init_loss_err():
     y_loss = {}
     y_loss['train'] = []
-    y_loss['val'] = []
+    y_loss['test'] = []
     y_err = {}
     y_err['train'] = []
-    y_err['val'] = []
+    y_err['test'] = []
     return y_loss, y_err
 
 
@@ -233,7 +233,7 @@ def train_model(model, model_test, criterion_lr, optimizer_view, exp_lr_schedule
                 optimizer_view.zero_grad()  # zero the parameter gradients
 
                 # forward
-                if phase == 'val':
+                if phase == 'test':
                     with torch.no_grad():
                         outputs = model(inputs)
                 else:
@@ -296,9 +296,9 @@ def train_model(model, model_test, criterion_lr, optimizer_view, exp_lr_schedule
 def draw_curve(current_epoch):
     x_epoch.append(current_epoch)
     ax0.plot(x_epoch, y_loss['train'], 'bo-', label='train')
-    ax0.plot(x_epoch, y_loss['val'], 'ro-', label='val')
+    ax0.plot(x_epoch, y_loss['test'], 'ro-', label='test')
     ax1.plot(x_epoch, y_err['train'], 'bo-', label='train')
-    ax1.plot(x_epoch, y_err['val'], 'ro-', label='val')
+    ax1.plot(x_epoch, y_err['test'], 'ro-', label='test')
     if current_epoch == 0:
         ax0.legend()
         ax1.legend()
@@ -362,6 +362,7 @@ if __name__ == '__main__':
         num_epochs = 120
 
     train_model(model, model_test, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes, start_epoch, opt,
-                num_epochs=20)
+                num_epochs=50)
 
-# python train.py --name drone --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16;
+# python train.py --name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16;
+# python train.py --name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --resume;

@@ -6,3 +6,11 @@ query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JP
 query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.50999117]; 
 query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.5551244]; 
 query_img_path: ./data/AHU/street_1.jpg; gallery_img_path: ./data/AHU/drone_1.JPG; score: [0.4665854]; 
+query_name: view; query_path: ./data/view; true_acc: 0.9996959099893569; 
+query_name: view; query_path: ./data/view; true_acc: 0.9996959099893569; 
+query_name: view; query_path: ./data/view; true_acc: 0.9992401215805471; 
+query_name: view; query_path: ./data/view; true_acc: 0.9995440729483283; 
+query_name: view; query_path: ./data/view; true_acc: 0.9995478522984175; 
+query_name: view; query_path: ./data/view; true_acc: 0.9890174256845805; 
+query_name: view; query_path: ./data/view; true_acc: 0.9967637540453075; 
+query_name: view; query_path: ./data/view; true_acc: 0.9941159164460135; 

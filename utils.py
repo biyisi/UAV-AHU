@@ -1,9 +1,114 @@
+from __future__ import absolute_import
+from __future__ import print_function
+from __future__ import division
+from model import view_net
+
 import os
 import torch
 import yaml
-from model import view_net
+import shutil
+import numpy as np
 
-# Get model list for resume
+
+class AverageMeter(object):
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+
+# 统计模型的参数大小
+def count_parameters_in_MB(model):
+    return sum(np.prod(v.size()) for name, v in model.named_parameters()) / 1e6
+
+
+def create_exp_dir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+    print('Experiment dir : {}'.format(path))
+
+
+def save_checkpoint(state, save_root='./model/baseline', is_best=False):
+    '''
+        :param state: 保存的参数内容，以字典形式
+        :param is_best: 是否为最佳结果
+        :param save_root: 保存的文件目录
+    '''
+    save_path = os.path.join(save_root, 'checkpoint.pth.tar')
+    torch.save(state, save_path)
+    if is_best:
+        best_save_path = os.path.join(save_root, 'model_best.pth.tar')
+        shutil.copyfile(save_path, best_save_path)
+
+
+
+def accuracy_k(output: torch, label, topk=(1,)):
+    """Computes the precision@k for the specified values of k"""
+    # topk=(1,5)，那么就是找出最大的前5个，返回tensor值和index下标
+    # topk=(1,5)表示为一个二元组，一个1，一个5
+    maxk = max(topk)
+    batch_size = label.size(0)
+    '''
+        求tensor中某个dim的前k大或者前k小的值以及对应的index
+        torch.topk(input, k, dim=None, largest=True, sorted=True, out=None) 
+                    -> (Tensor, LongTensor)
+        input：一个tensor数据
+        k：指明是得到前k个数据以及其index
+        dim： 指定在哪个维度上排序， 默认是最后一个维度
+        largest：如果为True，按照大到小排序； 如果为False，按照小到大排序
+        sorted：返回的结果按照顺序返回
+        out：可缺省，不要
+    '''
+    _, pred = output.topk(k=maxk, dim=1, largest=True, sorted=True)
+    # torch.t(): 矩阵转置
+    pred = pred.t()
+    '''
+        torch.eq(self, other: Number) -> Tensor:
+        torch.eq(input, other, out=None): 比较元素是否相等
+        label是torch.Size([batch_size]), view(1, -1)从[128]变化为[1, 128]
+        torch.expand_as(self, other: Tensor) -> Tensor: 将原有tensor复制扩展为指定维度tensor
+        correct是一个pred同类型的张量，每一个位置如果相等则为True，否则为False
+    '''
+    # correct = pred.eq(label.view(1, -1).expand_as(pred))
+    correct = torch.eq(pred, label.view(1, -1).expand_as(pred))
+
+    res = []
+    # k=1; k=5;
+    for k in topk:
+        # correct[:k]: 第一维取到k，然后进行降维处理, 转换成float, sum进行累加
+        correct_k = correct[:k].view(-1).float().sum(0)
+        # 计算出acc@1 和 acc@5，返回一个0-100的数字表示百分之多少
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
+
+
+def load_pretrained_model(model, pretrained_dict):
+    model_dict = model.state_dict()
+    # 1. filter out unnecessary keys
+    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+    # 2. overwrite entries in the existing state dict
+    model_dict.update(pretrained_dict)
+    # 3. load the new state dict
+    model.load_state_dict(model_dict)
+
+
+def transform_time(s):
+    m, s = divmod(int(s), 60)
+    h, m = divmod(m, 60)
+    return h, m, s
+
+
+# Get model list for resume, 找到最后的一个模型的名称，用于继续训练或者推理
 def get_model_list(dirname, key):
     if os.path.exists(dirname) is False:
         print('no dir: %s' % dirname)
@@ -20,18 +125,7 @@ def get_model_list(dirname, key):
 ######################################################################
 #  Load model for resume
 # ---------------------------
-def load_network(name, opt):
-    # Load config
-    dirname = os.path.join('./model', name)
-    last_model_name = os.path.basename(get_model_list(dirname, 'net'))
-    epoch = last_model_name.split('_')[1]
-    epoch = epoch.split('.')[0]
-    if not epoch == 'last':
-        epoch = int(epoch)
-    config_path = os.path.join(dirname, 'opts.yaml')
-    with open(config_path, 'r') as stream:
-        config = yaml.load(stream)
-
+def config_to_opt(config, opt):
     opt.name = config['name']
     opt.data_dir = config['data_dir']
     opt.train_all = config['train_all']
@@ -56,13 +150,39 @@ def load_network(name, opt):
     opt.use_dense = config['use_dense']
     opt.fp16 = config['fp16']
     opt.views = config['views']
+    return opt
+
+
+def load_network(name, opt, RESNET152=True, RESNET18=False, VGG19=False):
+    # Load config, 获取最后的epoch和网络名称
+    dirname = os.path.join('./model', name)
+    last_model_name = os.path.basename(get_model_list(dirname, 'net'))
+    epoch = last_model_name.split('_')[1]
+    epoch = epoch.split('.')[0]
+    if not epoch == 'last':
+        epoch = int(epoch)
+    config_path = os.path.join(dirname, 'opts.yaml')
+    with open(config_path, 'r') as stream:
+        config = yaml.load(stream)
+
+    opt = config_to_opt(config, opt)
 
     # if opt.use_dense:
     #     model = ft_net_dense(opt.nclasses, opt.droprate, opt.stride, None, opt.pool)
     # if opt.PCB:
     #     model = PCB(opt.nclasses)
-
-    model = view_net(opt.nclasses, opt.droprate, stride=opt.stride, pool=opt.pool, share_weight=opt.share, VGG19=False, RESNET152=True)
+    if RESNET152 == True:
+        model = view_net(opt.nclasses, opt.droprate, stride=opt.stride, pool=opt.pool, share_weight=opt.share,
+                         VGG19=False,
+                         RESNET152=True, RESNET18=False)
+    elif RESNET18 == True:
+        model = view_net(opt.nclasses, opt.droprate, stride=opt.stride, pool=opt.pool, share_weight=opt.share,
+                         VGG19=False,
+                         RESNET152=False, RESNET18=True)
+    else:
+        model = view_net(opt.nclasses, opt.droprate, stride=opt.stride, pool=opt.pool, share_weight=opt.share,
+                         VGG19=True,
+                         RESNET152=False, RESNET18=False)
 
     # if 'use_vgg19' in config:
     #     opt.use_vgg19 = config['use_vgg19']
@@ -75,7 +195,7 @@ def load_network(name, opt):
     else:
         save_filename = 'net_%s.pth' % epoch
 
-    # save_filename = 'net_094.pth'
+    # save_filename = 'net_024.pth'
     save_path = os.path.join('./model', name, save_filename)
     print('Load the model from %s' % save_path)
     network = model
@@ -83,11 +203,13 @@ def load_network(name, opt):
     return network, opt, epoch
 
 
+# 基本没用上
 def toogle_grad(model, requires_grad):
     for p in model.parameters():
         p.requires_grad_(requires_grad)
 
 
+# 基本没用上
 def update_average(model_tgt, model_src, beta):
     toogle_grad(model_src, False)
     toogle_grad(model_tgt, False)

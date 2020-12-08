@@ -8,20 +8,21 @@ import sys
 # print('所有图片文件夹列表：', data_set_list)
 
 def rename(end_path):
-    path = "/home/biyisi/PycharmProjects/pythonProject/data/new_street/"+end_path
+    # path = "/home/biyisi/PycharmProjects/pythonProject/data/test/street/"+end_path
+    path = "/home/biyisi/图片/1206/"+end_path
     count = 1
     filelist = os.listdir(path)
     for file in filelist:
         oldFile = os.path.join(path, file)
         if os.path.isfile(oldFile):
-            newFile = os.path.join(path, "image_" + str(count) + ".jpg")
+            newFile = os.path.join(path, "1206_"+end_path+"_street_" + str(count) + ".jpg")
             os.rename(oldFile, newFile)
         else:
             continue
         count += 1
     print("一共修改了" + str(count) + "个文件")
 
-
+rename('19')
 # rename("00")
 # rename("01")
 # rename("02")
