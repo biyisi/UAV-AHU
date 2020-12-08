@@ -164,9 +164,9 @@ def load_data(opt):
     # print(transform_train_list)
 
     data_transforms = init_data_transforms(transform_train_list, transform_test_list)
-    train_all = ''
-    if opt.train_all:
-        train_all = '_all'
+    # train_all = ''
+    # if opt.train_all:
+    #     train_all = '_all'
 
     image_datasets = {}
     image_datasets[TRAIN_FILE_NAME] = torchvision.datasets.ImageFolder(os.path.join(data_dir, TRAIN_FILE_NAME),
@@ -194,10 +194,23 @@ def init_loss_err():
     y_err['test'] = []
     return y_loss, y_err
 
-'''指定以知识蒸馏的方式训练网络'''
+
 def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes,
                    start_epoch, opt,
                    num_epochs=25):
+    """
+    指定以知识蒸馏的方式训练网络
+    :param teacher_model:
+    :param student_model:
+    :param criterion_lr:
+    :param optimizer_view:
+    :param exp_lr_scheduler:
+    :param dataset_sizes:
+    :param start_epoch:
+    :param opt:
+    :param num_epochs:
+    :return:
+    """
     start_time = time.time()
     criterionKD = utils.Logits()
 
@@ -276,9 +289,20 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
 
     return student_model
 
-'''指定正常训练一个网络模型'''
-def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes, start_epoch, opt,
-                num_epochs=25):
+
+def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes, start_epoch, opt, num_epochs=25):
+    """
+    指定正常训练一个网络模型
+    :param model:
+    :param criterion_lr:
+    :param optimizer_view:
+    :param exp_lr_scheduler:
+    :param dataset_sizes:
+    :param start_epoch:
+    :param opt:
+    :param num_epochs:
+    :return:
+    """
     start_time = time.time()
     start_warm_lr_up = 0.1
     start_warm_iteration = round(dataset_sizes[TRAIN_FILE_NAME] / opt.batchsize) * opt.warm_epoch
@@ -373,9 +397,9 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
         time_elapsed // 60, time_elapsed % 60))
 
     if opt.net_type == 'teacher':
-        utils.save_network_teacher(model, opt.out_model_name, epoch)
+        utils.save_network_teacher(model, opt.out_model_name, num_epochs)
     else:
-        utils.save_network_student(model, opt.out_model_name, epoch)
+        utils.save_network_student(model, opt.out_model_name, num_epochs)
 
     return model
 
@@ -395,19 +419,26 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
 if __name__ == '__main__':
     opt = init_options()
     fp16, data_dir, out_model_name = init_parameter(opt)
-    transform_train_list, data_transforms, image_datasets, dataloaders, dataset_sizes, class_names, use_gpu = load_data(
-        opt)
+    transform_train_list, data_transforms, image_datasets, dataloaders, dataset_sizes, class_names, use_gpu = \
+        load_data(opt)
     y_loss, y_err = init_loss_err()
     opt.nclasses = len(class_names)
 
-    '''如果输入指定网络类型为教师网络'''
+    # 如果输入指定网络类型为教师网络
     if opt.net_type == 'teacher':
         if opt.resume:
             teacher_model, opt, start_epoch = opt_resume(opt)
         else:
             start_epoch = 0
-            teacher_model = view_net(len(class_names), droprate=opt.droprate, stride=opt.stride, pool=opt.pool,
-                                     share_weight=opt.share, VGG19=False, RESNET152=True)
+            teacher_model = view_net(
+                len(class_names),
+                droprate=opt.droprate,
+                stride=opt.stride,
+                pool=opt.pool,
+                share_weight=opt.share,
+                VGG19=False,
+                RESNET152=True
+            )
         dir_name = os.path.join('./model/teacher', out_model_name)
         print(teacher_model)
         teacher_model = teacher_model.cuda()
@@ -435,17 +466,23 @@ if __name__ == '__main__':
             teacher_model, optimizer = amp.initialize(teacher_model, optimizer, opt_level="O1")
         criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
-        train_model(teacher_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
-                    exp_lr_scheduler=exp_lr_scheduler, dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt,
-                    num_epochs=50)
+        train_model(
+            teacher_model,
+            criterion_lr=criterion_lr,
+            optimizer_view=optimizer,
+            exp_lr_scheduler=exp_lr_scheduler,
+            dataset_sizes=dataset_sizes,
+            start_epoch=start_epoch,
+            opt=opt,
+            num_epochs=50
+        )
     elif opt.net_type == 'student':
         '''如果输入指定网络类型为学生网络'''
         if opt.resume:
             student_model, opt, start_epoch = opt_resume_student(opt)
         else:
             start_epoch = 0
-            student_model = simple_CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
-                                       pool=opt.pool)
+            student_model = simple_CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride, pool=opt.pool)
         dir_name = os.path.join('./model/student', out_model_name)
         if start_epoch >= 40:
             opt.lr = opt.lr * 0.1
@@ -471,11 +508,18 @@ if __name__ == '__main__':
             student_model, optimizer = amp.initialize(student_model, optimizer, opt_level="O1")
         criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
-        train_model(student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
-                    exp_lr_scheduler=exp_lr_scheduler, dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt,
-                    num_epochs=200)
+        train_model(
+            student_model,
+            criterion_lr=criterion_lr,
+            optimizer_view=optimizer,
+            exp_lr_scheduler=exp_lr_scheduler,
+            dataset_sizes=dataset_sizes,
+            start_epoch=start_epoch,
+            opt=opt,
+            num_epochs=200
+        )
     elif opt.net_type == 'kd':
-        '''如果输入指定为知识蒸馏，则读取教师模型用作推理，读取学生模型用作训练'''
+        # 如果输入指定为知识蒸馏，则读取教师模型用作推理，读取学生模型用作训练
         teacher_model = utils.load_teacher_infer_model(opt, RESNET18=False, RESNET152=True, VGG19=False)
         student_model, opt, start_epoch = opt_resume_student(opt)
         teacher_model.cuda()
@@ -497,9 +541,16 @@ if __name__ == '__main__':
             student_model, optimizer = amp.initialize(student_model, optimizer, opt_level="O1")
         criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
-        train_model_kd(teacher_model, student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
-                       exp_lr_scheduler=exp_lr_scheduler,
-                       dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt, num_epochs=200)
+        train_model_kd(
+            teacher_model,
+            student_model,
+            criterion_lr=criterion_lr,
+            optimizer_view=optimizer,
+            exp_lr_scheduler=exp_lr_scheduler,
+            dataset_sizes=dataset_sizes,
+            start_epoch=start_epoch,
+            opt=opt, num_epochs=200
+        )
 
     # if not opt.resume:
     #     if not os.path.isdir(dir_name):
