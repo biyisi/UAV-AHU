@@ -1,13 +1,22 @@
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
-from model import view_net
+from model import view_net, simple_CNN
 
 import os
 import torch
 import yaml
 import shutil
 import numpy as np
+
+
+class Logits(torch.nn.Module):
+    def __init__(self):
+        super(Logits, self).__init__()
+
+    def forward(self, out_student, out_teacher):
+        loss = torch.nn.functional.mse_loss(out_student, out_teacher)
+        return loss
 
 
 class AverageMeter(object):
@@ -49,7 +58,6 @@ def save_checkpoint(state, save_root='./model/baseline', is_best=False):
     if is_best:
         best_save_path = os.path.join(save_root, 'model_best.pth.tar')
         shutil.copyfile(save_path, best_save_path)
-
 
 
 def accuracy_k(output: torch, label, topk=(1,)):
@@ -126,7 +134,7 @@ def get_model_list(dirname, key):
 #  Load model for resume
 # ---------------------------
 def config_to_opt(config, opt):
-    opt.name = config['name']
+    opt.out_model_name = config['out_model_name']
     opt.data_dir = config['data_dir']
     opt.train_all = config['train_all']
     opt.droprate = config['droprate']
@@ -153,9 +161,9 @@ def config_to_opt(config, opt):
     return opt
 
 
-def load_network(name, opt, RESNET152=True, RESNET18=False, VGG19=False):
+def load_network_teacher(out_model_name, opt, RESNET152=True, RESNET18=False, VGG19=False):
     # Load config, 获取最后的epoch和网络名称
-    dirname = os.path.join('./model', name)
+    dirname = os.path.join('./model/teacher', out_model_name)
     last_model_name = os.path.basename(get_model_list(dirname, 'net'))
     epoch = last_model_name.split('_')[1]
     epoch = epoch.split('.')[0]
@@ -196,7 +204,47 @@ def load_network(name, opt, RESNET152=True, RESNET18=False, VGG19=False):
         save_filename = 'net_%s.pth' % epoch
 
     # save_filename = 'net_024.pth'
-    save_path = os.path.join('./model', name, save_filename)
+    save_path = os.path.join('./model/teacher', out_model_name, save_filename)
+    print('Load the model from %s' % save_path)
+    network = model
+    network.load_state_dict(torch.load(save_path))
+    return network, opt, epoch
+
+
+def load_teacher_infer_model(opt, RESNET18, RESNET152, VGG19):
+    model, _, epoch = load_network_teacher(opt.name, opt, RESNET18=RESNET18, RESNET152=RESNET152, VGG19=VGG19)
+    return model
+
+
+def load_student_infer_model(opt):
+    model, _, epoch = load_network_student(opt.name, opt)
+    return model
+
+
+def load_network_student(out_model_name, opt):
+    # Load config, 获取最后的epoch和网络名称
+    dirname = os.path.join('./model/student', out_model_name)
+    last_model_name = os.path.basename(get_model_list(dirname, 'net'))
+    epoch = last_model_name.split('_')[1]
+    epoch = epoch.split('.')[0]
+    if not epoch == 'last':
+        epoch = int(epoch)
+    config_path = os.path.join(dirname, 'opts.yaml')
+    with open(config_path, 'r') as stream:
+        config = yaml.load(stream)
+
+    opt = config_to_opt(config, opt)
+
+    model = simple_CNN(num_classes=opt.nclasses, droprate=opt.droprate, stride=opt.stride, pool=opt.pool)
+
+    # load model
+    if isinstance(epoch, int):
+        save_filename = 'net_%03d.pth' % epoch
+    else:
+        save_filename = 'net_%s.pth' % epoch
+
+    # save_filename = 'net_024.pth'
+    save_path = os.path.join('./model/student', out_model_name, save_filename)
     print('Load the model from %s' % save_path)
     network = model
     network.load_state_dict(torch.load(save_path))
@@ -227,14 +275,26 @@ def update_average(model_tgt, model_src, beta):
 ######################################################################
 # Save model
 # ---------------------------
-def save_network(network, dirname, epoch_label):
-    if not os.path.isdir('./model/' + dirname):
-        os.mkdir('./model/' + dirname)
+def save_network_teacher(network, dirname, epoch_label):
+    if not os.path.isdir('./model/teacher' + dirname):
+        os.mkdir('./model/teacher' + dirname)
     if isinstance(epoch_label, int):
         save_filename = 'net_%03d.pth' % epoch_label
     else:
         save_filename = 'net_%s.pth' % epoch_label
-    save_path = os.path.join('./model', dirname, save_filename)
+    save_path = os.path.join('./model/teacher', dirname, save_filename)
+    torch.save(network.cpu().state_dict(), save_path)
+    if torch.cuda.is_available:
+        network.cuda()
+
+def save_network_student(network, dirname, epoch_label):
+    if not os.path.isdir('./model/student' + dirname):
+        os.mkdir('./model/student' + dirname)
+    if isinstance(epoch_label, int):
+        save_filename = 'net_%03d.pth' % epoch_label
+    else:
+        save_filename = 'net_%s.pth' % epoch_label
+    save_path = os.path.join('./model/student', dirname, save_filename)
     torch.save(network.cpu().state_dict(), save_path)
     if torch.cuda.is_available:
         network.cuda()

@@ -12,7 +12,7 @@ import numpy as np
 
 from apex.fp16_utils import *
 from model import view_net
-from utils import load_network
+import utils
 
 QUERY_PATH ='./data/test'
 QUERY_NAME_DEFINE = 'satellite'
@@ -118,7 +118,7 @@ def get_labels_paths(img_path):
 
 
 def load_train_model(opt, RESNET18=False, RESNET152=True, VGG19=False):
-    model, _, epoch = load_network(opt.name, opt, RESNET18=RESNET18, RESNET152=RESNET152, VGG19=VGG19)
+    model, _, epoch = utils.load_network_teacher(opt.name, opt, RESNET18=RESNET18, RESNET152=RESNET152, VGG19=VGG19)
     # model.classifier.classifier = torch.nn.Sequential()
     model = model.eval()
     model = model.cuda()
@@ -126,7 +126,7 @@ def load_train_model(opt, RESNET18=False, RESNET152=True, VGG19=False):
 
 
 def load_train_model_feature(opt, RESNET18=False, RESNET152=True, VGG19=False):
-    model, _, epoch = load_network(opt.name, opt, RESNET18=RESNET18, RESNET152=RESNET152, VGG19=VGG19)
+    model, _, epoch = utils.load_network_teacher(opt.name, opt, RESNET18=RESNET18, RESNET152=RESNET152, VGG19=VGG19)
     model.classifier.classifier = torch.nn.Sequential()
     model = model.eval()
     model = model.cuda()

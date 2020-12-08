@@ -1,6 +1,6 @@
 from __future__ import print_function, division
 
-from model import view_net
+from model import view_net, simple_CNN
 from random_erasing import RandomErasing
 from autoaugment import ImageNetPolicy, CIFAR10Policy
 
@@ -22,6 +22,7 @@ matplotlib.use('agg')
 # print(torch.__version__)
 torch_version = torch.__version__
 
+# 指定训练的文件名
 TRAIN_FILE_NAME = 'view'
 
 try:
@@ -34,7 +35,7 @@ except ImportError:
 def init_options():
     parser = argparse.ArgumentParser(description='Training')
     parser.add_argument('--gpu_ids', default='0', type=str, help='gpu_ids: e.g. 0  0,1,2  0,2')
-    parser.add_argument('--name', default='view', type=str, help='output model name')
+    parser.add_argument('--out_model_name', default='view', type=str, help='output model name')
     parser.add_argument('--pool', default='avg', type=str, help='pool avg')
     parser.add_argument('--data_dir', default='./data/train', type=str, help='training dir path')
     parser.add_argument('--train_all', action='store_true', help='use all training data')
@@ -58,24 +59,26 @@ def init_options():
     parser.add_argument('--extra_Google', default="true", action='store_true', help='using extra noise Google')
     parser.add_argument('--fp16', action='store_true',
                         help='use float16 instead of float32, which will save about 50% memory')
+    parser.add_argument('--net_type', default='teacher', type=str, help='choose train teacher_net or student_net')
     opt = parser.parse_args()
     return opt
 
 
 def opt_resume(opt):
-    model, opt, start_epoch = utils.load_network(opt.name, opt, RESNET152=True, RESNET18=False, VGG19=False)
+    model, opt, start_epoch = utils.load_network_teacher(opt.out_model_name, opt, RESNET152=True, RESNET18=False,
+                                                         VGG19=False)
     return model, opt, start_epoch
 
 
-def opt_not_resume():
-    start_epoch = 0
-    return start_epoch
+def opt_resume_student(opt):
+    model, opt, start_epoch = utils.load_network_student(opt.out_model_name, opt)
+    return model, opt, start_epoch
 
 
 def init_parameter(opt):
     fp16 = opt.fp16
     data_dir = opt.data_dir
-    name = opt.name
+    out_model_name = opt.out_model_name
     str_ids = opt.gpu_ids.split(',')
     gpu_ids = []
     for str_id in str_ids:
@@ -88,7 +91,7 @@ def init_parameter(opt):
         torch.cuda.set_device(gpu_ids[0])
         torch.backends.cudnn.benchmark = True
 
-    return fp16, data_dir, name
+    return fp16, data_dir, out_model_name
 
 
 def init_transform_train_list():
@@ -166,7 +169,8 @@ def load_data(opt):
         train_all = '_all'
 
     image_datasets = {}
-    image_datasets[TRAIN_FILE_NAME] = torchvision.datasets.ImageFolder(os.path.join(data_dir, TRAIN_FILE_NAME), data_transforms['train'])
+    image_datasets[TRAIN_FILE_NAME] = torchvision.datasets.ImageFolder(os.path.join(data_dir, TRAIN_FILE_NAME),
+                                                                       data_transforms['train'])
     # 8 workers may work faster
     dataloaders = {
         x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize, shuffle=True, num_workers=2,
@@ -190,14 +194,90 @@ def init_loss_err():
     y_err['test'] = []
     return y_loss, y_err
 
+'''指定以知识蒸馏的方式训练网络'''
+def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes,
+                   start_epoch, opt,
+                   num_epochs=25):
+    start_time = time.time()
+    criterionKD = utils.Logits()
 
-def init_running():
-    running_loss = 0.0
-    running_corrects = 0.0
-    return running_loss, running_corrects
+    for epoch in range(num_epochs - start_epoch):
+        epoch = epoch + start_epoch
+        print('Epoch {}/{}'.format(epoch, num_epochs - 1))
+        print('-' * 10)
 
+        for phase in ['train']:
+            teacher_model.cuda()
+            teacher_model.eval()
+            student_model.cuda()
+            student_model.train()
 
-def train_model(model, model_test, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes, start_epoch, opt,
+            running_loss = 0.0
+            running_corrects = 0.0
+
+            for data in dataloaders[TRAIN_FILE_NAME]:
+                inputs, labels = data
+                now_batch_size, c, h, w = inputs.shape
+
+                if now_batch_size < opt.batchsize:
+                    continue
+                # TODO: this
+                inputs = torch.autograd.Variable(inputs.cuda().detach())
+                labels = torch.autograd.Variable(labels.cuda().detach())
+
+                # TODO: this
+                # 学生网络训练结果
+                outputs_student = student_model(inputs)
+                _, predicts = torch.max(outputs_student.data, 1)
+                loss_student = criterion_lr(outputs_student, labels)
+                # 教师网络推理结果
+                outputs_teacher = teacher_model(inputs)
+
+                loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 1.0
+                loss = loss_student + loss_kd
+
+                optimizer_view.zero_grad()  # zero the parameter gradients
+                if phase == 'train':
+                    # TODO: this
+                    if fp16:
+                        with amp.scale_loss(loss, optimizer_view) as scaled_loss:
+                            scaled_loss.backward()
+                    else:
+                        loss.backward()
+
+                    optimizer_view.step()
+
+                running_loss += loss.item() * now_batch_size
+                running_corrects += float(torch.sum(predicts == labels.data))
+
+            epoch_loss = running_loss / dataset_sizes[TRAIN_FILE_NAME]
+            epoch_acc = running_corrects / dataset_sizes[TRAIN_FILE_NAME]
+            # epoch_loss = running_loss / len(os.listdir(opt.data_dir))
+            # epoch_acc = running_corrects / len(os.listdir(opt.data_dir))
+            print('{} Loss: {:.4f} View_Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
+            y_loss[phase].append(epoch_loss)
+            y_err[phase].append(1.0 - epoch_acc)
+            # deep copy the model
+            exp_lr_scheduler.step()
+            last_model_weights = student_model.state_dict()
+            if epoch % 5 == 4:
+                utils.save_network_student(student_model, opt.out_model_name, epoch)
+
+        time_elapsed = time.time() - start_time
+        print('Training complete in {:.0f}m {:.0f}s'.format(
+            time_elapsed // 60, time_elapsed % 60))
+        print()
+
+    time_elapsed = time.time() - start_time
+    print('Training complete in {:.0f}m {:.0f}s'.format(
+        time_elapsed // 60, time_elapsed % 60))
+
+    utils.save_network_student(student_model, opt.out_model_name, num_epochs)
+
+    return student_model
+
+'''指定正常训练一个网络模型'''
+def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes, start_epoch, opt,
                 num_epochs=25):
     start_time = time.time()
     start_warm_lr_up = 0.1
@@ -213,54 +293,55 @@ def train_model(model, model_test, criterion_lr, optimizer_view, exp_lr_schedule
                 model.train(True)
             else:
                 model.train(False)
-            running_loss, running_corrects = init_running()
-            # for data, data2 in zip(dataloaders['view'], dataloaders['google']):
+
+            running_loss = 0.0
+            running_corrects = 0.0
+
             for data in dataloaders[TRAIN_FILE_NAME]:
                 inputs, labels = data
                 # inputs2, labels2 = data2
                 now_batch_size, c, h, w = inputs.shape
+
                 if now_batch_size < opt.batchsize:
                     continue
                 if use_gpu:
+                    # TODO: this
                     inputs = torch.autograd.Variable(inputs.cuda().detach())
                     labels = torch.autograd.Variable(labels.cuda().detach())
                     # inputs = inputs.cuda()
-                    # if opt.extra_Google:
-                    #     inputs2 = torch.autograd.Variable(inputs2.cuda().detach())
-                    #     labels2 = torch.autograd.Variable(labels2.cuda().detach())
                 else:
                     inputs, labels = torch.autograd.Variable(inputs), torch.autograd.Variable(labels)
-                optimizer_view.zero_grad()  # zero the parameter gradients
 
                 # forward
                 if phase == 'test':
                     with torch.no_grad():
                         outputs = model(inputs)
                 else:
+                    # TODO: this
                     outputs = model(inputs)
-                    # if opt.extra_Google:
-                    #     outputs, outputs2 = model(inputs, inputs2)
-                    # else:
-                    #     outputs = model(inputs)
+
                 _, predicts = torch.max(outputs.data, 1)
+
                 loss = criterion_lr(outputs, labels)
-                # if opt.extra_Google:
-                #     loss += criterion_lr(outputs2, labels2)
+
                 # backward+optimize only if in training phase
                 if epoch < opt.warm_epoch and phase == 'train':
                     start_warm_lr_up = min(1.0, start_warm_lr_up + 0.9 / start_warm_iteration)
                     loss *= start_warm_lr_up
 
+                optimizer_view.zero_grad()  # zero the parameter gradients
                 if phase == 'train':
+                    # TODO: this
                     if fp16:
                         with amp.scale_loss(loss, optimizer_view) as scaled_loss:
                             scaled_loss.backward()
                     else:
                         loss.backward()
+
                     optimizer_view.step()
 
-                    if opt.moving_avg < 1.0:
-                        utils.update_average(model_test, model, opt.moving_avg)
+                    # if opt.moving_avg < 1.0:
+                    #     utils.update_average(model_test, model, opt.moving_avg)
 
                 running_loss += loss.item() * now_batch_size
                 running_corrects += float(torch.sum(predicts == labels.data))
@@ -277,7 +358,10 @@ def train_model(model, model_test, criterion_lr, optimizer_view, exp_lr_schedule
                 exp_lr_scheduler.step()
             last_model_weights = model.state_dict()
             if epoch % 5 == 4:
-                utils.save_network(model, opt.name, epoch)
+                if opt.net_type == 'teacher':
+                    utils.save_network_teacher(model, opt.out_model_name, epoch)
+                else:
+                    utils.save_network_student(model, opt.out_model_name, epoch)
 
         time_elapsed = time.time() - start_time
         print('Training complete in {:.0f}m {:.0f}s'.format(
@@ -288,81 +372,191 @@ def train_model(model, model_test, criterion_lr, optimizer_view, exp_lr_schedule
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
 
-    utils.save_network(model, opt.name, num_epochs)
+    if opt.net_type == 'teacher':
+        utils.save_network_teacher(model, opt.out_model_name, epoch)
+    else:
+        utils.save_network_student(model, opt.out_model_name, epoch)
 
     return model
 
 
-def draw_curve(current_epoch):
-    x_epoch.append(current_epoch)
-    ax0.plot(x_epoch, y_loss['train'], 'bo-', label='train')
-    ax0.plot(x_epoch, y_loss['test'], 'ro-', label='test')
-    ax1.plot(x_epoch, y_err['train'], 'bo-', label='train')
-    ax1.plot(x_epoch, y_err['test'], 'ro-', label='test')
-    if current_epoch == 0:
-        ax0.legend()
-        ax1.legend()
-    fig.savefig(os.path.join('./model', name, 'train.jpg'))
+# def draw_curve(current_epoch):
+#     x_epoch.append(current_epoch)
+#     ax0.plot(x_epoch, y_loss['train'], 'bo-', label='train')
+#     ax0.plot(x_epoch, y_loss['test'], 'ro-', label='test')
+#     ax1.plot(x_epoch, y_err['train'], 'bo-', label='train')
+#     ax1.plot(x_epoch, y_err['test'], 'ro-', label='test')
+#     if current_epoch == 0:
+#         ax0.legend()
+#         ax1.legend()
+#     fig.savefig(os.path.join('./model', out_model_name, 'train.jpg'))
 
 
 if __name__ == '__main__':
     opt = init_options()
-    fp16, data_dir, name = init_parameter(opt)
+    fp16, data_dir, out_model_name = init_parameter(opt)
     transform_train_list, data_transforms, image_datasets, dataloaders, dataset_sizes, class_names, use_gpu = load_data(
         opt)
     y_loss, y_err = init_loss_err()
-
-    if opt.resume:
-        model, opt, start_epoch = opt_resume(opt)
-    else:
-        start_epoch = opt_not_resume()
-        model = view_net(len(class_names), droprate=opt.droprate, stride=opt.stride, pool=opt.pool, share_weight=opt.share, VGG19=False, RESNET152=True)
-
-
-    x_epoch = []
-    fig = plt.figure()
-    ax0 = fig.add_subplot(121, title="loss")
-    ax1 = fig.add_subplot(122, title="top1err")
     opt.nclasses = len(class_names)
-    print(model)
 
-    if start_epoch >= 40:
-        opt.lr = opt.lr * 0.1
-    ignored_params = list(map(id, model.classifier.parameters()))
-    base_params = filter(lambda p: id(p) not in ignored_params, model.parameters())
+    '''如果输入指定网络类型为教师网络'''
+    if opt.net_type == 'teacher':
+        if opt.resume:
+            teacher_model, opt, start_epoch = opt_resume(opt)
+        else:
+            start_epoch = 0
+            teacher_model = view_net(len(class_names), droprate=opt.droprate, stride=opt.stride, pool=opt.pool,
+                                     share_weight=opt.share, VGG19=False, RESNET152=True)
+        dir_name = os.path.join('./model/teacher', out_model_name)
+        print(teacher_model)
+        teacher_model = teacher_model.cuda()
+        if start_epoch >= 40:
+            opt.lr = opt.lr * 0.1
+        # 有些参数写多了，忽略掉
+        ignored_params = list(map(id, teacher_model.classifier.parameters()))
+        base_params = filter(lambda p: id(p) not in ignored_params, teacher_model.parameters())
+        optimizer = torch.optim.SGD([
+            {'params': base_params, 'lr': 0.1 * opt.lr},
+            {'params': teacher_model.classifier.parameters(), 'lr': opt.lr}
+        ], weight_decay=5e-4, momentum=0.9, nesterov=True)
 
-    optimizer_view = torch.optim.SGD([
-        {'params': base_params, 'lr': 0.1 * opt.lr},
-        {'params': model.classifier.parameters(), 'lr': opt.lr}
-    ], weight_decay=5e-4, momentum=0.9, nesterov=True)
-    exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer_view, step_size=80, gamma=0.1)
+        if not opt.resume:
+            if not os.path.isdir(dir_name):
+                os.mkdir(dir_name)
+            # record every run
+            shutil.copyfile('./train.py', dir_name + '/train.py')
+            shutil.copyfile('./model.py', dir_name + '/model.py')
+            # save opts
+            with open('%s/opts.yaml' % dir_name, 'w') as fp:
+                yaml.dump(vars(opt), fp, default_flow_style=False)
 
-    # dir_name = os.path.join('./model', name)
-    dir_name = os.path.join('./model', name)
-    if not opt.resume:
-        if not os.path.isdir(dir_name):
-            os.mkdir(dir_name)
-        # record every run
-        shutil.copyfile('./train.py', dir_name + '/train.py')
-        shutil.copyfile('./model.py', dir_name + '/model.py')
-        # save opts
-        with open('%s/opts.yaml' % dir_name, 'w') as fp:
-            yaml.dump(vars(opt), fp, default_flow_style=False)
-    model = model.cuda()
+        if fp16:
+            teacher_model, optimizer = amp.initialize(teacher_model, optimizer, opt_level="O1")
+        criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
+        exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
+        train_model(teacher_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
+                    exp_lr_scheduler=exp_lr_scheduler, dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt,
+                    num_epochs=50)
+    elif opt.net_type == 'student':
+        '''如果输入指定网络类型为学生网络'''
+        if opt.resume:
+            student_model, opt, start_epoch = opt_resume_student(opt)
+        else:
+            start_epoch = 0
+            student_model = simple_CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
+                                       pool=opt.pool)
+        dir_name = os.path.join('./model/student', out_model_name)
+        if start_epoch >= 40:
+            opt.lr = opt.lr * 0.1
+        # 有些参数写多了，忽略掉
+        ignored_params = list(map(id, student_model.classifier.parameters()))
+        base_params = filter(lambda p: id(p) not in ignored_params, student_model.parameters())
+        optimizer = torch.optim.SGD([
+            {'params': base_params, 'lr': 0.1 * opt.lr},
+            {'params': student_model.classifier.parameters(), 'lr': opt.lr}
+        ], weight_decay=5e-4, momentum=0.9, nesterov=True)
 
-    if fp16:
-        model, optimizer_view = amp.initialize(model, optimizer_view, opt_level="O1")
+        if not opt.resume:
+            if not os.path.isdir(dir_name):
+                os.mkdir(dir_name)
+            # record every run
+            shutil.copyfile('./train.py', dir_name + '/train.py')
+            shutil.copyfile('./model.py', dir_name + '/model.py')
+            # save opts
+            with open('%s/opts.yaml' % dir_name, 'w') as fp:
+                yaml.dump(vars(opt), fp, default_flow_style=False)
 
-    criterion_lr = torch.nn.CrossEntropyLoss()
-    if opt.moving_avg < 1.0:
-        model_test = copy.deepcopy(model)
-        num_epochs = 140
-    else:
-        model_test = None
-        num_epochs = 120
+        if fp16:
+            student_model, optimizer = amp.initialize(student_model, optimizer, opt_level="O1")
+        criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
+        exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
+        train_model(student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
+                    exp_lr_scheduler=exp_lr_scheduler, dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt,
+                    num_epochs=200)
+    elif opt.net_type == 'kd':
+        '''如果输入指定为知识蒸馏，则读取教师模型用作推理，读取学生模型用作训练'''
+        teacher_model = utils.load_teacher_infer_model(opt, RESNET18=False, RESNET152=True, VGG19=False)
+        student_model, opt, start_epoch = opt_resume_student(opt)
+        teacher_model.cuda()
+        teacher_model.eval()
+        student_model.cuda()
+        student_model.train()
+        dir_name = os.path.join('./model/kd', out_model_name)
+        if start_epoch >= 40:
+            opt.lr = opt.lr * 0.1
+        # 有些参数写多了，忽略掉
+        ignored_params = list(map(id, student_model.classifier.parameters()))
+        base_params = filter(lambda p: id(p) not in ignored_params, student_model.parameters())
+        optimizer = torch.optim.SGD([
+            {'params': base_params, 'lr': 0.1 * opt.lr},
+            {'params': student_model.classifier.parameters(), 'lr': opt.lr}
+        ], weight_decay=5e-4, momentum=0.9, nesterov=True)
 
-    train_model(model, model_test, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes, start_epoch, opt,
-                num_epochs=50)
+        if fp16:
+            student_model, optimizer = amp.initialize(student_model, optimizer, opt_level="O1")
+        criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
+        exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
+        train_model_kd(teacher_model, student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
+                       exp_lr_scheduler=exp_lr_scheduler,
+                       dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt, num_epochs=200)
 
-# python train.py --name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16;
-# python train.py --name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --resume;
+    # if not opt.resume:
+    #     if not os.path.isdir(dir_name):
+    #         os.mkdir(dir_name)
+    #     # record every run
+    #     shutil.copyfile('./train.py', dir_name + '/train.py')
+    #     shutil.copyfile('./model.py', dir_name + '/model.py')
+    #     # save opts
+    #     with open('%s/opts.yaml' % dir_name, 'w') as fp:
+    #         yaml.dump(vars(opt), fp, default_flow_style=False)
+
+    # TODO: 画图代码，未执行
+    # x_epoch = []
+    # fig = plt.figure()
+    # ax0 = fig.add_subplot(121, title="loss")
+    # ax1 = fig.add_subplot(122, title="top1err")
+
+    # print(model)
+    # # 使用GPU
+    # model = model.cuda()
+
+    # if start_epoch >= 40:
+    #     opt.lr = opt.lr * 0.1
+    # # 有些参数写多了，忽略掉
+    # ignored_params = list(map(id, model.classifier.parameters()))
+    # base_params = filter(lambda p: id(p) not in ignored_params, model.parameters())
+
+    # view的优化器
+    # optimizer_view = torch.optim.SGD([
+    #     {'params': base_params, 'lr': 0.1 * opt.lr},
+    #     {'params': model.classifier.parameters(), 'lr': opt.lr}
+    # ], weight_decay=5e-4, momentum=0.9, nesterov=True)
+    # exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer_view, step_size=80, gamma=0.1)
+
+    # if fp16:
+    #     model, optimizer_view = amp.initialize(model, optimizer_view, opt_level="O1")
+    # 交叉熵
+    # criterion_lr = torch.nn.CrossEntropyLoss()
+
+    # if opt.moving_avg < 1.0:
+    #     model_test = copy.deepcopy(model)
+    #     num_epochs = 140
+    # else:
+    #     model_test = None
+    #     num_epochs = 120
+
+    # if opt.net_type == 'teacher':
+    #     train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes, start_epoch, opt,
+    #             num_epochs=50)
+    # if opt.net_type == 'student':
+    #     train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes, start_epoch, opt,
+    #                 num_epochs=50)
+
+# python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type teacher;
+# python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type teacher --resume;
+
+# python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type student;
+# python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type student --resume;
+
+# python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type kd --resume;

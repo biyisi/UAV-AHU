@@ -300,7 +300,7 @@ class view_net(torch.nn.Module):
 
 
 class simple_CNN(nn.Module):
-    def __init__(self, image_size, num_classes, out_channels_simple=64, droprate=0.5, stride=2):
+    def __init__(self, num_classes, out_channels_simple=64, droprate=0.5, stride=2, pool='avg'):
         super(simple_CNN, self).__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=out_channels_simple, kernel_size=3, stride=stride, padding=1),
@@ -346,7 +346,7 @@ if __name__ == '__main__':
     # net = view_net(21, droprate=0.5, share_weight=False, VGG19=False, RESNET152=True, RESNET18=False)
     # net = view_net(21, droprate=0.5, share_weight=False, VGG19=True, RESNET152=False)
 
-    net = simple_CNN(image_size=384, num_classes=21, out_channels_simple=128, droprate=0.5, stride=2)
+    net = simple_CNN(num_classes=21, out_channels_simple=128, droprate=0.5, stride=2)
     print(net)
     print("param size = %f MB" % utils.count_parameters_in_MB(net))
     # RESNET18: 11.962941MB; RESNET152: 61.252669MB; VGG19: 143.951677MB

@@ -7,6 +7,7 @@ import time
 import logging
 import argparse
 import numpy as np
+from itertools import chain
 
 import torch
 import torch.nn as nn
@@ -20,11 +21,15 @@ from utils import load_pretrained_model, save_checkpoint
 from utils import create_exp_dir, count_parameters_in_MB
 from network import define_tsnet
 
-parser = argparse.ArgumentParser(description='train base net')
+# from kd_losses import *
+
+parser = argparse.ArgumentParser(description='train kd')
 
 # various path
 parser.add_argument('--save_root', type=str, default='./results', help='models and logs are saved here')
 parser.add_argument('--img_root', type=str, default='./datasets', help='path name of image dataset')
+parser.add_argument('--s_init', type=str, required=True, help='initial parameters of student model')
+parser.add_argument('--t_model', type=str, required=True, help='path name of teacher model')
 
 # training hyper parameters
 parser.add_argument('--print_freq', type=int, default=50, help='frequency of showing training results on console')
@@ -41,13 +46,29 @@ parser.add_argument('--seed', type=int, default=2, help='random seed')
 parser.add_argument('--note', type=str, default='try', help='note for this run')
 
 # net and dataset choosen
-# parser.add_argument('--data_name', type=str, default='cifar10', required=True, help='name of dataset')  # cifar10/cifar100
-# parser.add_argument('--net_name', type=str, default='resnet20', required=True, help='name of basenet')  # resnet20/resnet110
+parser.add_argument('--data_name', type=str, required=True, help='name of dataset')  # cifar10/cifar100
+parser.add_argument('--t_name', type=str, required=True, help='name of teacher')  # resnet20/resnet110
+parser.add_argument('--s_name', type=str, required=True, help='name of student')  # resnet20/resnet110
 
-parser.add_argument('--data_name', type=str, default='cifar10', help='name of dataset')  # cifar10/cifar100
-parser.add_argument('--net_name', type=str, default='resnet20', help='name of basenet')  # resnet20/resnet110
+# hyperparameter
+parser.add_argument('--kd_mode', type=str, required=True, help='mode of kd, which can be:'
+                                                               'logits/st/at/fitnet/nst/pkt/fsp/rkd/ab/'
+                                                               'sp/sobolev/cc/lwm/irg/vid/ofd/afd')
+parser.add_argument('--lambda_kd', type=float, default=1.0, help='trade-off parameter for kd loss')
+parser.add_argument('--T', type=float, default=4.0, help='temperature for ST')
+parser.add_argument('--p', type=float, default=2.0, help='power for AT')
+parser.add_argument('--w_dist', type=float, default=25.0, help='weight for RKD distance')
+parser.add_argument('--w_angle', type=float, default=50.0, help='weight for RKD angle')
+parser.add_argument('--m', type=float, default=2.0, help='margin for AB')
+parser.add_argument('--gamma', type=float, default=0.4, help='gamma in Gaussian RBF for CC')
+parser.add_argument('--P_order', type=int, default=2, help='P-order Taylor series of Gaussian RBF for CC')
+parser.add_argument('--w_irg_vert', type=float, default=0.1, help='weight for IRG vertex')
+parser.add_argument('--w_irg_edge', type=float, default=5.0, help='weight for IRG edge')
+parser.add_argument('--w_irg_tran', type=float, default=5.0, help='weight for IRG transformation')
+parser.add_argument('--sf', type=float, default=1.0, help='scale factor for VID, i.e. mid_channels = sf * out_channels')
+parser.add_argument('--init_var', type=float, default=5.0, help='initial variance for VID')
+parser.add_argument('--att_f', type=float, default=1.0, help='attention factor of mid_channels for AFD')
 
-# 在接受到多余的命令行参数时不报错。相反的，返回一个tuple类型的命名空间和一个保存着余下的命令行字符的list。
 args, unparsed = parser.parse_known_args()
 
 args.save_root = os.path.join(args.save_root, args.note)
@@ -60,52 +81,54 @@ fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 
 
+class Logits(nn.Module):
+    def __init__(self):
+        super(Logits, self).__init__()
+
+    def forward(self, out_student, out_teacher):
+        loss = torch.nn.functional.mse_loss(out_student, out_teacher)
+        return loss
+
+
 def main():
-    # 使后面的随机数按一定的顺序生成.随机数种子的参数只是确定一下随机数的起始位置。
     np.random.seed(args.seed)
-    # 为CPU设置种子用于生成随机数，以使得结果是确定的
     torch.manual_seed(args.seed)
     if args.cuda:
-        # torch.cuda.manual_seed()为当前GPU设置随机种子
         torch.cuda.manual_seed(args.seed)
         cudnn.enabled = True
         cudnn.benchmark = True
-    # 类似于我给定的opt
     logging.info("args = %s", args)
     logging.info("unparsed_args = %s", unparsed)
 
     logging.info('----------- Network Initialization --------------')
-    # TODO：
-    # name: 网络名称，类似我给的RESNET152, RESNET18
-    # num_class: 分类数量，我给定的应该是21，也就是len(class_num)
-    # cuda: 指定使用cuda，感觉可以后面net = net.cuda()调用
-    net = define_tsnet(name=args.net_name, num_class=args.num_class, cuda=args.cuda)
-    logging.info('%s', net)
-    logging.info("param size = %fMB", count_parameters_in_MB(net))
+    student_net = define_tsnet(name=args.s_name, num_class=args.num_class, cuda=args.cuda)
+    checkpoint = torch.load(args.s_init)
+    load_pretrained_model(student_net, checkpoint['net'])
+    logging.info('Student: %s', student_net)
+    logging.info('Student param size = %fMB', count_parameters_in_MB(student_net))
+
+    teacher_net = define_tsnet(name=args.t_name, num_class=args.num_class, cuda=args.cuda)
+    checkpoint = torch.load(args.t_model)
+    load_pretrained_model(teacher_net, checkpoint['net'])
+    teacher_net.eval()
+    for param in teacher_net.parameters():
+        param.requires_grad = False
+    logging.info('Teacher: %s', teacher_net)
+    logging.info('Teacher param size = %fMB', count_parameters_in_MB(teacher_net))
     logging.info('-----------------------------------------------')
 
-    # save initial parameters
-    logging.info('Saving initial parameters......')
-    save_path = os.path.join(args.save_root, 'initial_r{}.pth.tar'.format(args.net_name[6:]))
-    torch.save({
-        'epoch': 0,
-        'net': net.state_dict(),
-        'prec@1': 0.0,
-        'prec@5': 0.0,
-    }, save_path)
+    # define loss functions
+    criterionKD = Logits()
+
+    if args.cuda:
+        criterionCls = torch.nn.CrossEntropyLoss().cuda()
+    else:
+        criterionCls = torch.nn.CrossEntropyLoss()
 
     # initialize optimizer
-    optimizer = torch.optim.SGD(net.parameters(),
-                                lr=args.lr,
-                                momentum=args.momentum,
+    optimizer = torch.optim.SGD(student_net.parameters(), lr=args.lr, momentum=args.momentum,
                                 weight_decay=args.weight_decay,
                                 nesterov=True)
-
-    # define loss functions
-    if args.cuda:
-        criterion = torch.nn.CrossEntropyLoss().cuda()
-    else:
-        criterion = torch.nn.CrossEntropyLoss()
 
     # define transforms
     if args.data_name == 'cifar10':
@@ -126,6 +149,7 @@ def main():
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std)
     ])
+
     test_transform = transforms.Compose([
         transforms.CenterCrop(32),
         transforms.ToTensor(),
@@ -139,6 +163,7 @@ def main():
                 train=True,
                 download=True),
         batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+
     test_loader = torch.utils.data.DataLoader(
         dataset(root=args.img_root,
                 transform=test_transform,
@@ -146,21 +171,23 @@ def main():
                 download=True),
         batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
+    # warp nets and criterions for train and test
+    nets = {'student_net': student_net, 'teacher_net': teacher_net}
+    criterions = {'criterionCls': criterionCls, 'criterionKD': criterionKD}
+
     best_top1 = 0
     best_top5 = 0
     for epoch in range(1, args.epochs + 1):
-        # 调整学习率，前100个epoch学习率为0.1，中50个epoch学习率为0.01，后50个epoch学习率为0.001
         adjust_lr(optimizer, epoch)
 
         # train one epoch
         epoch_start_time = time.time()
-        train(train_loader, net, optimizer, criterion, epoch)
+        train(train_loader, nets, optimizer, criterions, epoch)
 
         # evaluate on testing set
         logging.info('Testing the models......')
-        test_top1, test_top5 = test(test_loader, net, criterion)
+        test_top1, test_top5 = test(test_loader, nets, criterions, epoch)
 
-        # 一个epoch跑完了，统计以下一个epoch的时间
         epoch_duration = time.time() - epoch_start_time
         logging.info('Epoch time: {}s'.format(int(epoch_duration)))
 
@@ -173,45 +200,33 @@ def main():
         logging.info('Saving models......')
         save_checkpoint({
             'epoch': epoch,
-            'net': net.state_dict(),
+            'student_net': student_net.state_dict(),
+            'teacher_net': teacher_net.state_dict(),
             'prec@1': test_top1,
             'prec@5': test_top5,
         }, is_best, args.save_root)
 
 
-def train(train_loader, net, optimizer, criterion, epoch):
+def train(train_loader, nets, optimizer, criterions, epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter()
+    cls_losses = AverageMeter()
+    kd_losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
-    '''
-        train_loader: 训练数据
-        train_loader = torch.utils.data.DataLoader(
-                dataset(root=args.img_root,
-                        transform=train_transform,
-                        train=True,
-                        download=True),
-                batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
-        optimizer: 优化器
-        optimizer = torch.optim.SGD(net.parameters(),
-                                        lr=args.lr,
-                                        momentum=args.momentum,
-                                        weight_decay=args.weight_decay,
-                                        nesterov=True)
-        criterion: 评价器
-        criterion = torch.nn.CrossEntropyLoss().cuda()
-        net = define_tsnet(name=args.net_name, num_class=args.num_class, cuda=args.cuda)
-    '''
-    net.train()
-    # net.eval()
+
+    student_net = nets['student_net']
+    teacher_net = nets['teacher_net']
+
+    criterionCls = criterions['criterionCls']
+    criterionKD = criterions['criterionKD']
+
+    student_net.train()
+    if args.kd_mode in ['vid', 'ofd']:
+        for i in range(1, 4):
+            criterionKD[i].train()
+
     end = time.time()
-    '''
-        enumerate() 函数用于将一个可遍历的数据对象(如列表、元组或字符串)组合为一个索引序列，同时列出数据和数据下标，一般用在 for 循环当中。
-        enumerate(sequence, [start=0])
-            sequence -- 一个序列、迭代器或其他支持迭代对象。
-            start -- 下标起始位置。
-    '''
     for i, (img, target) in enumerate(train_loader, start=1):
         data_time.update(time.time() - end)
 
@@ -219,25 +234,19 @@ def train(train_loader, net, optimizer, criterion, epoch):
             img = img.cuda(non_blocking=True)
             target = target.cuda(non_blocking=True)
 
-        print('img.shape=', img.shape) # img.shape= torch.Size([128, 3, 32, 32])
-        print('target.shape=', target.shape) # target.shape= torch.Size([128])
-        # RESNET20返回：stem, rb1, rb2, rb3, feat, out
-        # stem: (pstem, stem) 第一层输出结果和激活函数后结果的元组
-        # rb1, rb2, rb3: 第一, 二, 三个make_layer的结果
-        # feat: 平均池化结果降维
-        # out: 经过全连接线性分类器之后的结果
-        _, _, _, _, _, out = net(img)
-        # 评价器可以直接得到loss，通过out/outputs和target/label对比
-        loss = criterion(out, target)
+        # stem_s, rb1_s, rb2_s, rb3_s, feat_s, out_s = student_net(img)
+        # stem_t, rb1_t, rb2_t, rb3_t, feat_t, out_t = teacher_net(img)
 
-        prec1, prec5 = accuracy(out, target, topk=(1, 5))
+        _, _, _, _, _, out_student = student_net(img)
+        _, _, _, _, _, out_teacher = teacher_net(img)
 
-        print(loss.item())
-        print(prec1.item())
-        print(prec5.item())
-        print(img.size(0)) #batchsize
+        cls_loss = criterionCls(out_student, target)
+        kd_loss = criterionKD(out_student, out_teacher.detach()) * args.lambda_kd
+        loss = cls_loss + kd_loss
 
-        losses.update(loss.item(), img.size(0))
+        prec1, prec5 = accuracy_k(out_student, target, topk=(1, 5))
+        cls_losses.update(cls_loss.item(), img.size(0))
+        kd_losses.update(kd_loss.item(), img.size(0))
         top1.update(prec1.item(), img.size(0))
         top5.update(prec5.item(), img.size(0))
 
@@ -252,20 +261,31 @@ def train(train_loader, net, optimizer, criterion, epoch):
             log_str = ('Epoch[{0}]:[{1:03}/{2:03}] '
                        'Time:{batch_time.val:.4f} '
                        'Data:{data_time.val:.4f}  '
-                       'loss:{losses.val:.4f}({losses.avg:.4f})  '
+                       'Cls:{cls_losses.val:.4f}({cls_losses.avg:.4f})  '
+                       'KD:{kd_losses.val:.4f}({kd_losses.avg:.4f})  '
                        'prec@1:{top1.val:.2f}({top1.avg:.2f})  '
                        'prec@5:{top5.val:.2f}({top5.avg:.2f})'.format(
                 epoch, i, len(train_loader), batch_time=batch_time, data_time=data_time,
-                losses=losses, top1=top1, top5=top5))
+                cls_losses=cls_losses, kd_losses=kd_losses, top1=top1, top5=top5))
             logging.info(log_str)
 
 
-def test(test_loader, net, criterion):
-    losses = AverageMeter()
+def test(test_loader, nets, criterions, epoch):
+    cls_losses = AverageMeter()
+    kd_losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
 
-    net.eval()
+    student_net = nets['snet']
+    teacher_net = nets['tnet']
+
+    criterionCls = criterions['criterionCls']
+    criterionKD = criterions['criterionKD']
+
+    student_net.eval()
+    if args.kd_mode in ['vid', 'ofd']:
+        for i in range(1, 4):
+            criterionKD[i].eval()
 
     end = time.time()
     for i, (img, target) in enumerate(test_loader, start=1):
@@ -274,16 +294,20 @@ def test(test_loader, net, criterion):
             target = target.cuda(non_blocking=True)
 
         with torch.no_grad():
-            _, _, _, _, _, out = net(img)
-            loss = criterion(out, target)
+            stem_s, rb1_s, rb2_s, rb3_s, feat_s, out_s = student_net(img)
+            stem_t, rb1_t, rb2_t, rb3_t, feat_t, out_t = teacher_net(img)
 
-        prec1, prec5 = accuracy(out, target, topk=(1, 5))
-        losses.update(loss.item(), img.size(0))
+        cls_loss = criterionCls(out_s, target)
+        kd_loss = criterionKD(out_s, out_t.detach()) * args.lambda_kd
+
+        prec1, prec5 = accuracy_k(out_s, target, topk=(1, 5))
+        cls_losses.update(cls_loss.item(), img.size(0))
+        kd_losses.update(kd_loss.item(), img.size(0))
         top1.update(prec1.item(), img.size(0))
         top5.update(prec5.item(), img.size(0))
 
-    f_l = [losses.avg, top1.avg, top5.avg]
-    logging.info('Loss: {:.4f}, Prec@1: {:.2f}, Prec@5: {:.2f}'.format(*f_l))
+    f_l = [cls_losses.avg, kd_losses.avg, top1.avg, top5.avg]
+    logging.info('Cls: {:.4f}, KD: {:.4f}, Prec@1: {:.2f}, Prec@5: {:.2f}'.format(*f_l))
 
     return top1.avg, top5.avg
 
@@ -303,10 +327,3 @@ def adjust_lr(optimizer, epoch):
 
 if __name__ == '__main__':
     main()
-
-# CUDA_VISIBLE_DEVICES=0 python -u train_base.py \
-#                            --save_root "./results/base/" \
-#                            --data_name cifar10 \
-#                            --num_class 10 \
-#                            --net_name resnet20 \
-#                            --note base-c10-r20
