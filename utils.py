@@ -212,7 +212,7 @@ def load_network_teacher(out_model_name, opt, RESNET152=True, RESNET18=False, VG
 
 
 def load_teacher_infer_model(opt, RESNET18, RESNET152, VGG19):
-    model, _, epoch = load_network_teacher(opt.name, opt, RESNET18=RESNET18, RESNET152=RESNET152, VGG19=VGG19)
+    model, _, epoch = load_network_teacher('view', opt, RESNET18=RESNET18, RESNET152=RESNET152, VGG19=VGG19)
     return model
 
 
@@ -243,7 +243,9 @@ def load_network_student(out_model_name, opt):
     else:
         save_filename = 'net_%s.pth' % epoch
 
-    # save_filename = 'net_024.pth'
+    # save_filename = 'net_139.pth'
+    save_filename = 'net_079.pth'
+
     save_path = os.path.join('./model/student', out_model_name, save_filename)
     print('Load the model from %s' % save_path)
     network = model
@@ -295,6 +297,19 @@ def save_network_student(network, dirname, epoch_label):
     else:
         save_filename = 'net_%s.pth' % epoch_label
     save_path = os.path.join('./model/student', dirname, save_filename)
+    torch.save(network.cpu().state_dict(), save_path)
+    if torch.cuda.is_available:
+        network.cuda()
+
+
+def save_network_kd(network, dirname, epoch_label):
+    if not os.path.isdir('./model/kd' + dirname):
+        os.mkdir('./model/kd' + dirname)
+    if isinstance(epoch_label, int):
+        save_filename = 'net_%03d.pth' % epoch_label
+    else:
+        save_filename = 'net_%s.pth' % epoch_label
+    save_path = os.path.join('./model/kd', dirname, save_filename)
     torch.save(network.cpu().state_dict(), save_path)
     if torch.cuda.is_available:
         network.cuda()

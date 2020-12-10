@@ -40,8 +40,8 @@ def init_options():
     parser.add_argument('--data_dir', default='./data/train', type=str, help='training dir path')
     parser.add_argument('--train_all', action='store_true', help='use all training data')
     parser.add_argument('--color_jitter', action='store_true', help='use color jitter in training')
-    parser.add_argument('--batchsize', default=4, type=int, help='batchsize')
-    parser.add_argument('--stride', default=2, type=int, help='stride')
+    parser.add_argument('--batchsize', default=1, type=int, help='batchsize')
+    parser.add_argument('--stride', default=1, type=int, help='stride')
     parser.add_argument('--pad', default=10, type=int, help='padding')
     parser.add_argument('--h', default=384, type=int, help='height')
     parser.add_argument('--w', default=384, type=int, help='width')
@@ -52,14 +52,14 @@ def init_options():
     parser.add_argument('--warm_epoch', default=0, type=int, help='the first K epoch that needs warm up')
     parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
     parser.add_argument('--moving_avg', default=1.0, type=float, help='moving average')
-    parser.add_argument('--droprate', default=0.5, type=float, help='drop rate')
+    parser.add_argument('--droprate', default=0.75, type=float, help='drop rate')
     parser.add_argument('--DA', action='store_true', help='use Color Data Augmentation')
     parser.add_argument('--resume', action='store_true', help='use resume training')
     parser.add_argument('--share', action='store_true', help='share weight between different view')
     parser.add_argument('--extra_Google', default="true", action='store_true', help='using extra noise Google')
-    parser.add_argument('--fp16', action='store_true',
+    parser.add_argument('--fp16', default="true", action='store_true',
                         help='use float16 instead of float32, which will save about 50% memory')
-    parser.add_argument('--net_type', default='teacher', type=str, help='choose train teacher_net or student_net')
+    parser.add_argument('--net_type', default='kd', type=str, help='choose train teacher_net or student_net')
     opt = parser.parse_args()
     return opt
 
@@ -194,7 +194,10 @@ def init_loss_err():
     y_err['test'] = []
     return y_loss, y_err
 
+
 '''指定以知识蒸馏的方式训练网络'''
+
+
 def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes,
                    start_epoch, opt,
                    num_epochs=25):
@@ -205,6 +208,7 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
         epoch = epoch + start_epoch
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
+        cnt = 0
 
         for phase in ['train']:
             teacher_model.cuda()
@@ -218,6 +222,13 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
             for data in dataloaders[TRAIN_FILE_NAME]:
                 inputs, labels = data
                 now_batch_size, c, h, w = inputs.shape
+
+                cnt += now_batch_size
+                if cnt % 6000 == 0:
+                    print("cnt =", cnt)
+                # print("this.cnt =", cnt)
+                # print("now_batch_size =", now_batch_size)
+                # print("opt.batchsize =", opt.batchsize)
 
                 if now_batch_size < opt.batchsize:
                     continue
@@ -234,15 +245,23 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
                 outputs_teacher = teacher_model(inputs)
 
                 loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 1.0
-                loss = loss_student + loss_kd
+                loss = 0.5*loss_student + 0.5*loss_kd
 
+                # print(loss_student)
+                # print(loss_kd)
+                # print(loss)
+                # print(optimizer_view.lr)
                 optimizer_view.zero_grad()  # zero the parameter gradients
+                # print("this")
                 if phase == 'train':
+                    # print("this1")
                     # TODO: this
                     if fp16:
+                        # print("this2")
                         with amp.scale_loss(loss, optimizer_view) as scaled_loss:
                             scaled_loss.backward()
                     else:
+                        # print("this3")
                         loss.backward()
 
                     optimizer_view.step()
@@ -261,7 +280,7 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
             exp_lr_scheduler.step()
             last_model_weights = student_model.state_dict()
             if epoch % 5 == 4:
-                utils.save_network_student(student_model, opt.out_model_name, epoch)
+                utils.save_network_kd(student_model, opt.out_model_name, epoch)
 
         time_elapsed = time.time() - start_time
         print('Training complete in {:.0f}m {:.0f}s'.format(
@@ -272,11 +291,14 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
 
-    utils.save_network_student(student_model, opt.out_model_name, num_epochs)
+    utils.save_network_kd(student_model, opt.out_model_name, num_epochs)
 
     return student_model
 
+
 '''指定正常训练一个网络模型'''
+
+
 def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes, start_epoch, opt,
                 num_epochs=25):
     start_time = time.time()
@@ -284,6 +306,8 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
     start_warm_iteration = round(dataset_sizes[TRAIN_FILE_NAME] / opt.batchsize) * opt.warm_epoch
 
     for epoch in range(num_epochs - start_epoch):
+        cnt = 0
+
         epoch = epoch + start_epoch
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
@@ -301,6 +325,9 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
                 inputs, labels = data
                 # inputs2, labels2 = data2
                 now_batch_size, c, h, w = inputs.shape
+                cnt += now_batch_size
+                if cnt % 6000 == 0:
+                    print("cnt =", cnt)
 
                 if now_batch_size < opt.batchsize:
                     continue
@@ -373,9 +400,9 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
         time_elapsed // 60, time_elapsed % 60))
 
     if opt.net_type == 'teacher':
-        utils.save_network_teacher(model, opt.out_model_name, epoch)
+        utils.save_network_teacher(model, opt.out_model_name, num_epochs)
     else:
-        utils.save_network_student(model, opt.out_model_name, epoch)
+        utils.save_network_student(model, opt.out_model_name, num_epochs)
 
     return model
 
@@ -466,7 +493,7 @@ if __name__ == '__main__':
             # save opts
             with open('%s/opts.yaml' % dir_name, 'w') as fp:
                 yaml.dump(vars(opt), fp, default_flow_style=False)
-
+        student_model.cuda()
         if fp16:
             student_model, optimizer = amp.initialize(student_model, optimizer, opt_level="O1")
         criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
@@ -476,8 +503,8 @@ if __name__ == '__main__':
                     num_epochs=200)
     elif opt.net_type == 'kd':
         '''如果输入指定为知识蒸馏，则读取教师模型用作推理，读取学生模型用作训练'''
-        teacher_model = utils.load_teacher_infer_model(opt, RESNET18=False, RESNET152=True, VGG19=False)
-        student_model, opt, start_epoch = opt_resume_student(opt)
+        teacher_model, _, _ = utils.load_network_teacher(opt.out_model_name, opt, RESNET18=False, RESNET152=True, VGG19=False)
+        student_model, _, start_epoch = opt_resume_student(opt)
         teacher_model.cuda()
         teacher_model.eval()
         student_model.cuda()
@@ -485,6 +512,7 @@ if __name__ == '__main__':
         dir_name = os.path.join('./model/kd', out_model_name)
         if start_epoch >= 40:
             opt.lr = opt.lr * 0.1
+        # print("------------opt.batchsize =", opt.batchsize)
         # 有些参数写多了，忽略掉
         ignored_params = list(map(id, student_model.classifier.parameters()))
         base_params = filter(lambda p: id(p) not in ignored_params, student_model.parameters())
@@ -556,7 +584,7 @@ if __name__ == '__main__':
 # python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type teacher;
 # python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type teacher --resume;
 
-# python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type student;
-# python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type student --resume;
+# python train.py --out_model_name view --droprate 0.75 --batchsize 16 --stride 1 --h 384  --w 384 --fp16 --net_type student;
+# python train.py --out_model_name view --droprate 0.75 --batchsize 16 --stride 1 --h 384  --w 384 --fp16 --net_type student --resume;
 
-# python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type kd --resume;
+# python train.py --out_model_name view --droprate 0.75 --batchsize 4 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type kd --resume;

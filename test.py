@@ -15,7 +15,7 @@ from model import view_net
 import utils
 
 QUERY_PATH ='./data/test'
-QUERY_NAME_DEFINE = 'satellite'
+QUERY_NAME_DEFINE = 'view'
 
 
 def init_options():
@@ -25,7 +25,7 @@ def init_options():
     parser.add_argument('--test_dir', default=QUERY_PATH, type=str, help='./test_data')
     parser.add_argument('--name', default='view', type=str, help='save model path')
     parser.add_argument('--pool', default='avg', type=str, help='avg|max')
-    parser.add_argument('--batchsize', default=20, type=int, help='batchsize')
+    parser.add_argument('--batchsize', default=8, type=int, help='batchsize')
     parser.add_argument('--h', default=384, type=int, help='height')
     parser.add_argument('--w', default=384, type=int, help='width')
     parser.add_argument('--views', default=2, type=int, help='views')
@@ -256,15 +256,20 @@ if __name__ == '__main__':
     image_datasets, dataloaders, use_gpu = load_data(opt, test_dir)
     start_time = time.time()
 
-    Acc_statistics = False
-    Feature_Savemat = True
+    # Acc_statistics = False
+    # Feature_Savemat = True
 
-    # Acc_statistics = True
-    # Feature_Savemat = False
+    Acc_statistics = True
+    Feature_Savemat = False
 
 
     if Acc_statistics:
-        model = load_train_model(opt, RESNET18=False, RESNET152=True, VGG19=False)
+        # model = load_train_model(opt, RESNET18=False, RESNET152=True, VGG19=False)
+
+        model, _, _ = utils.load_network_student(opt.name, opt)
+        model = model.eval()
+        model = model.cuda()
+
         query_name = QUERY_NAME_DEFINE
         # print("image_datasets[drone].imgs =", image_datasets["drone"].imgs)
         query_labels, query_paths = get_labels_paths(image_datasets[query_name].imgs)
@@ -274,7 +279,7 @@ if __name__ == '__main__':
         with torch.no_grad():
             print("dataloaders[query_name] =", dataloaders[query_name])
             true_acc = compare_label(model, dataloaders[query_name], query_labels)
-        save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/" + QUERY_NAME_DEFINE, true_acc)
+        save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/student" + QUERY_NAME_DEFINE, true_acc)
         print(true_acc)
     elif Feature_Savemat:
         model = load_train_model_feature(opt, RESNET18=False, RESNET152=True, VGG19=False)
@@ -295,3 +300,9 @@ if __name__ == '__main__':
     # result_mat = save_matlab(query_feature, query_labels, query_paths)
     # print(opt.name)
     # result = './model/%s/result.txt' % opt.name
+
+# net_79.pth 0.8973227419829362
+# net_124.pth(蒸馏) 0.8342159458664313
+# net_139.pth(蒸馏) 0.8698146513680495
+# net_144.pth(蒸馏) 0.8601059135039718
+# net_184.pth(蒸馏) 0.8689320388349514

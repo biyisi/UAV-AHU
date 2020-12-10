@@ -2,7 +2,13 @@ import pretrainedmodels
 import torchvision
 import torch
 import torch.nn as nn
-import utils
+# import utils
+
+import numpy as np
+
+
+def count_parameters_in_MB(model):
+    return sum(np.prod(v.size()) for name, v in model.named_parameters()) / 1e6
 
 
 class resblock(nn.Module):
@@ -300,30 +306,31 @@ class view_net(torch.nn.Module):
 
 
 class simple_CNN(nn.Module):
-    def __init__(self, num_classes, out_channels_simple=64, droprate=0.5, stride=2, pool='avg'):
+    def __init__(self, num_classes, out_channels_simple=256, droprate=0.5, stride=2, pool='avg'):
         super(simple_CNN, self).__init__()
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=out_channels_simple, kernel_size=3, stride=stride, padding=1),
+            nn.Conv2d(in_channels=3, out_channels=256, kernel_size=3, stride=stride, padding=1),
             nn.BatchNorm2d(out_channels_simple),
             nn.LeakyReLU(0.1),
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(in_channels=out_channels_simple, out_channels=out_channels_simple*4, kernel_size=3, stride=stride, padding=1),
-            nn.BatchNorm2d(out_channels_simple*4),
-            nn.LeakyReLU(0.1),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-        )
+        # self.conv2 = nn.Sequential(
+        #     nn.Conv2d(in_channels=out_channels_simple, out_channels=out_channels_simple * 4, kernel_size=3,
+        #               stride=stride, padding=1),
+        #     nn.BatchNorm2d(out_channels_simple * 4),
+        #     nn.LeakyReLU(0.1),
+        #     nn.MaxPool2d(kernel_size=2, stride=2),
+        # )
         # self.fc = nn.Linear(32 * (image_size // 4) * (image_size // 4), num_classes)
         # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         # print("output_size=", self.avgpool.output_size)
         # self.fc = nn.Linear(out_channels_simple*4, num_classes)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.classifier = ClassBlock(out_channels_simple*4, num_classes, droprate=droprate)
+        self.classifier = ClassBlock(256, num_classes, droprate=droprate)
 
     def forward(self, x):
         x = self.conv1(x)
-        x = self.conv2(x)
+        # x = self.conv2(x)
 
         # x = self.avgpool(x)
         # x = x.view(x.size(0), -1)
@@ -346,12 +353,12 @@ if __name__ == '__main__':
     # net = view_net(21, droprate=0.5, share_weight=False, VGG19=False, RESNET152=True, RESNET18=False)
     # net = view_net(21, droprate=0.5, share_weight=False, VGG19=True, RESNET152=False)
 
-    net = simple_CNN(num_classes=21, out_channels_simple=128, droprate=0.5, stride=2)
+    net = simple_CNN(num_classes=21, out_channels_simple=256, droprate=0.5, stride=2)
     print(net)
-    print("param size = %f MB" % utils.count_parameters_in_MB(net))
+    print("param size = %f MB" % count_parameters_in_MB(net))
     # RESNET18: 11.962941MB; RESNET152: 61.252669MB; VGG19: 143.951677MB
     # print("-------------------------------------------------------")
-    input_tensor = torch.autograd.Variable(torch.FloatTensor(8, 3, 512, 512))
+    input_tensor = torch.autograd.Variable(torch.FloatTensor(8, 3, 384, 384))
     # input_tensor = torch.autograd.Variable(torch.FloatTensor(8, 3, 16, 16))
     '''构造一个2*3*4*4的张量矩阵，矩阵元素维度为4*4，每3个4*4的矩阵为一个维度，这样3*4*4的维度有2个'''
     # print(input_tensor)
@@ -360,9 +367,7 @@ if __name__ == '__main__':
     print('net output_tensor size:', output_tensor.shape)
     # print(output_tensor.shape)
 
-
     # m = nn.MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
     # q = torch.randn(1,2,5,5)
     # o = m(q)
     # print(o.shape)
-
