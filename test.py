@@ -15,7 +15,7 @@ from model import view_net
 import utils
 
 QUERY_PATH ='./data/test'
-QUERY_NAME_DEFINE = 'view'
+QUERY_NAME_DEFINE = 'label_view'
 
 
 def init_options():
@@ -249,6 +249,14 @@ def infer_feature(model, dataloaders, ms, opt, query_labels, query_paths):
     return features
 
 
+def load_student_kd_model_feature(name, opt):
+    model, _, epoch = utils.load_network_student(opt.name, opt)
+    model.classifier.classifier = torch.nn.Sequential()
+    model = model.eval()
+    model = model.cuda()
+    return model
+
+
 if __name__ == '__main__':
     opt = init_options()
     opt, str_ids, name, test_dir = init_load_train_config(opt)
@@ -282,13 +290,17 @@ if __name__ == '__main__':
         save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/student" + QUERY_NAME_DEFINE, true_acc)
         print(true_acc)
     elif Feature_Savemat:
-        model = load_train_model_feature(opt, RESNET18=False, RESNET152=True, VGG19=False)
+        # model = load_train_model_feature(opt, RESNET18=False, RESNET152=True, VGG19=False)
+        model = load_student_kd_model_feature(opt.name, opt)
+        print(model)
         query_name = QUERY_NAME_DEFINE
         query_labels, query_paths = get_labels_paths(image_datasets[query_name].imgs)
         with torch.no_grad():
             print("dataloaders[query_name] =", dataloaders[query_name])
             query_features = infer_feature(model, dataloaders[query_name], ms, opt, query_labels, query_paths)
-        mat_name = QUERY_NAME_DEFINE + ".mat"
+        # mat_name = "teacher_159_"+QUERY_NAME_DEFINE + ".mat"
+        mat_name = "kd_159_"+QUERY_NAME_DEFINE + ".mat"
+        # mat_name = "student_159_"+QUERY_NAME_DEFINE + ".mat"
         result_mat = save_matlab(query_features=query_features, query_labels=query_labels, query_paths=query_paths,
                                  mat_name=mat_name)
     # with torch.no_grad():
@@ -301,8 +313,35 @@ if __name__ == '__main__':
     # print(opt.name)
     # result = './model/%s/result.txt' % opt.name
 
-# net_79.pth 0.8973227419829362
-# net_124.pth(蒸馏) 0.8342159458664313
-# net_139.pth(蒸馏) 0.8698146513680495
-# net_144.pth(蒸馏) 0.8601059135039718
-# net_184.pth(蒸馏) 0.8689320388349514
+
+'''训练集449张图片，知识蒸馏方法：SoftTarget。 温度：4，Alpha：0.85。测试集准确率如下'''
+# net_200.pth(Student) 0.850412249705536
+# net_400.pth(BestKD) 0.9128386336866903
+# net_50.pth(Teacher) 0.9956811935610522
+'''使用含有8个label的全部测试图片组成的测试集进行测试的结果，特征提取对比'''
+# teacher_len = 2547
+# round(teacher_len * 0.01) = 25
+# Recall@1:99.96 Recall@5:99.96 Recall@10:99.96 Recall@top1:100.00 AP:99.58
+# student_len = 2547
+# round(student_len * 0.01) = 25
+# Recall@1:98.19 Recall@5:99.29 Recall@10:99.57 Recall@top1:99.80 AP:43.12
+# kd_len = 2547
+# round(kd_len * 0.01) = 25
+# Recall@1:99.06 Recall@5:99.61 Recall@10:99.73 Recall@top1:99.84 AP:50.92
+
+'''裁减后测试集label_view, 159张测试集照片'''
+# net_200.pth(Student) 0.8364779874213837
+# net_400.pth(BestKD) 0.9308176100628931
+# net_50.pth(Teacher) 0.9937106918238994
+'''使用含有8个label的裁减后测试集label_view, 159张测试集照片进行测试的结果，特征提取对比'''
+# teacher_len = 159
+# round(teacher_len * 0.01) = 2
+# Recall@1:100.00 Recall@5:100.00 Recall@10:100.00 Recall@top1:100.00 AP:95.58
+# student_len = 159
+# round(student_len * 0.01) = 2
+# Recall@1:86.16 Recall@5:93.71 Recall@10:95.60 Recall@top1:93.08 AP:41.71
+# kd_len = 159
+# round(kd_len * 0.01) = 2
+# Recall@1:89.94 Recall@5:96.23 Recall@10:98.11 Recall@top1:94.97 AP:47.57
+
+

@@ -19,6 +19,24 @@ class Logits(torch.nn.Module):
         return loss
 
 
+class SoftTarget(torch.nn.Module):
+    '''
+    Distilling the Knowledge in a Neural Network
+    https://arxiv.org/pdf/1503.02531.pdf
+    '''
+
+    def __init__(self, T):
+        super(SoftTarget, self).__init__()
+        self.T = T
+
+    def forward(self, out_s, out_t):
+        loss = torch.nn.functional.kl_div(torch.nn.functional.log_softmax(out_s / self.T, dim=1),
+                        torch.nn.functional.softmax(out_t / self.T, dim=1),
+                        reduction='batchmean') * self.T * self.T
+
+        return loss
+
+
 class AverageMeter(object):
     def __init__(self):
         self.reset()
@@ -243,8 +261,8 @@ def load_network_student(out_model_name, opt):
     else:
         save_filename = 'net_%s.pth' % epoch
 
-    # save_filename = 'net_139.pth'
-    save_filename = 'net_079.pth'
+    # save_filename = 'net_400.pth'
+    save_filename = 'net_200.pth'
 
     save_path = os.path.join('./model/student', out_model_name, save_filename)
     print('Load the model from %s' % save_path)
@@ -288,6 +306,7 @@ def save_network_teacher(network, dirname, epoch_label):
     torch.save(network.cpu().state_dict(), save_path)
     if torch.cuda.is_available:
         network.cuda()
+
 
 def save_network_student(network, dirname, epoch_label):
     if not os.path.isdir('./model/student' + dirname):

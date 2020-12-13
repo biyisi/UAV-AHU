@@ -40,7 +40,7 @@ def init_options():
     parser.add_argument('--data_dir', default='./data/train', type=str, help='training dir path')
     parser.add_argument('--train_all', action='store_true', help='use all training data')
     parser.add_argument('--color_jitter', action='store_true', help='use color jitter in training')
-    parser.add_argument('--batchsize', default=1, type=int, help='batchsize')
+    parser.add_argument('--batchsize', default=4, type=int, help='batchsize')
     parser.add_argument('--stride', default=1, type=int, help='stride')
     parser.add_argument('--pad', default=10, type=int, help='padding')
     parser.add_argument('--h', default=384, type=int, help='height')
@@ -50,7 +50,7 @@ def init_options():
     parser.add_argument('--use_dense', action='store_true', help='use densenet')
     parser.add_argument('--use_NAS', action='store_true', help='use NAS')
     parser.add_argument('--warm_epoch', default=0, type=int, help='the first K epoch that needs warm up')
-    parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
+    parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
     parser.add_argument('--moving_avg', default=1.0, type=float, help='moving average')
     parser.add_argument('--droprate', default=0.75, type=float, help='drop rate')
     parser.add_argument('--DA', action='store_true', help='use Color Data Augmentation')
@@ -203,6 +203,7 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
                    num_epochs=25):
     start_time = time.time()
     criterionKD = utils.Logits()
+    # criterionKD = utils.SoftTarget(4.0)
 
     for epoch in range(num_epochs - start_epoch):
         epoch = epoch + start_epoch
@@ -224,7 +225,7 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
                 now_batch_size, c, h, w = inputs.shape
 
                 cnt += now_batch_size
-                if cnt % 6000 == 0:
+                if cnt % 60 == 0:
                     print("cnt =", cnt)
                 # print("this.cnt =", cnt)
                 # print("now_batch_size =", now_batch_size)
@@ -242,15 +243,20 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
                 _, predicts = torch.max(outputs_student.data, 1)
                 loss_student = criterion_lr(outputs_student, labels)
                 # 教师网络推理结果
-                outputs_teacher = teacher_model(inputs)
+                with torch.no_grad():
+                    outputs_teacher = teacher_model(inputs)
+                # outputs_teacher1 = teacher_model(inputs)
 
-                loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 1.0
-                loss = 0.5*loss_student + 0.5*loss_kd
+                loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 0.5
+                # loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 0.5
+                # loss_kd = criterion_KD()
+                loss = 0.8*loss_student + 0.2*loss_kd
+                # loss = 0.99*loss_student + 0.01*loss_kd
 
-                # print(loss_student)
-                # print(loss_kd)
-                # print(loss)
-                # print(optimizer_view.lr)
+                # print(loss_student) #
+                # print(loss_kd) #
+                # print(loss) #
+                # print(optimizer_view)
                 optimizer_view.zero_grad()  # zero the parameter gradients
                 # print("this")
                 if phase == 'train':
@@ -326,7 +332,7 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
                 # inputs2, labels2 = data2
                 now_batch_size, c, h, w = inputs.shape
                 cnt += now_batch_size
-                if cnt % 6000 == 0:
+                if cnt % 60 == 0:
                     print("cnt =", cnt)
 
                 if now_batch_size < opt.batchsize:
@@ -496,7 +502,8 @@ if __name__ == '__main__':
         student_model.cuda()
         if fp16:
             student_model, optimizer = amp.initialize(student_model, optimizer, opt_level="O1")
-        criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
+        # criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
+        criterion_lr = torch.nn.CrossEntropyLoss().cuda()  # 交叉熵
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
         train_model(student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
                     exp_lr_scheduler=exp_lr_scheduler, dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt,
@@ -523,11 +530,12 @@ if __name__ == '__main__':
 
         if fp16:
             student_model, optimizer = amp.initialize(student_model, optimizer, opt_level="O1")
-        criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
+        # criterion_lr = torch.nn.CrossEntropyLoss()  # 交叉熵
+        criterion_lr = torch.nn.CrossEntropyLoss().cuda()  # 交叉熵
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
         train_model_kd(teacher_model, student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
                        exp_lr_scheduler=exp_lr_scheduler,
-                       dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt, num_epochs=200)
+                       dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt, num_epochs=20000)
 
     # if not opt.resume:
     #     if not os.path.isdir(dir_name):
@@ -584,7 +592,7 @@ if __name__ == '__main__':
 # python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type teacher;
 # python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type teacher --resume;
 
-# python train.py --out_model_name view --droprate 0.75 --batchsize 16 --stride 1 --h 384  --w 384 --fp16 --net_type student;
-# python train.py --out_model_name view --droprate 0.75 --batchsize 16 --stride 1 --h 384  --w 384 --fp16 --net_type student --resume;
+# python train.py --out_model_name view --droprate 0.5 --batchsize 12 --lr 0.01 --stride 1 --h 384  --w 384 --fp16 --net_type student;
+# python train.py --out_model_name view --droprate 0.5 --batchsize 12 --lr 0.01 --stride 1 --h 384  --w 384 --fp16 --net_type student --resume;
 
-# python train.py --out_model_name view --droprate 0.75 --batchsize 4 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type kd --resume;
+# python train.py --out_model_name view --droprate 0.5 --batchsize 6 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type kd --resume;
