@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
-from model import view_net, simple_CNN
+from model import view_net, simple_CNN, simple_2CNN, simple_3CNN
 
 import os
 import torch
@@ -179,7 +179,7 @@ def config_to_opt(config, opt):
     return opt
 
 
-def load_network_teacher(out_model_name, opt, RESNET152=True, RESNET18=False, VGG19=False):
+def load_network_teacher(out_model_name, opt, RESNET152=True, RESNET101=False, VGG19=False, VGG16=False):
     # Load config, 获取最后的epoch和网络名称
     dirname = os.path.join('./model/teacher', out_model_name)
     last_model_name = os.path.basename(get_model_list(dirname, 'net'))
@@ -200,15 +200,19 @@ def load_network_teacher(out_model_name, opt, RESNET152=True, RESNET18=False, VG
     if RESNET152 == True:
         model = view_net(opt.nclasses, opt.droprate, stride=opt.stride, pool=opt.pool, share_weight=opt.share,
                          VGG19=False,
-                         RESNET152=True, RESNET18=False)
-    elif RESNET18 == True:
+                         RESNET152=True, RESNET101=False, VGG16=False)
+    elif RESNET101 == True:
         model = view_net(opt.nclasses, opt.droprate, stride=opt.stride, pool=opt.pool, share_weight=opt.share,
                          VGG19=False,
-                         RESNET152=False, RESNET18=True)
+                         RESNET152=False, RESNET101=True, VGG16=False)
+    elif VGG16 == True:
+        model = view_net(opt.nclasses, opt.droprate, stride=opt.stride, pool=opt.pool, share_weight=opt.share,
+                         VGG19=False,
+                         RESNET152=False, RESNET101=False, VGG16=True)
     else:
         model = view_net(opt.nclasses, opt.droprate, stride=opt.stride, pool=opt.pool, share_weight=opt.share,
                          VGG19=True,
-                         RESNET152=False, RESNET18=False)
+                         RESNET152=False, RESNET101=False, VGG16=False)
 
     # if 'use_vgg19' in config:
     #     opt.use_vgg19 = config['use_vgg19']
@@ -221,7 +225,8 @@ def load_network_teacher(out_model_name, opt, RESNET152=True, RESNET18=False, VG
     else:
         save_filename = 'net_%s.pth' % epoch
 
-    # save_filename = 'net_024.pth'
+    # save_filename = 'net_002.pth'
+
     save_path = os.path.join('./model/teacher', out_model_name, save_filename)
     print('Load the model from %s' % save_path)
     network = model
@@ -261,8 +266,11 @@ def load_network_student(out_model_name, opt):
     else:
         save_filename = 'net_%s.pth' % epoch
 
-    # save_filename = 'net_400.pth'
-    save_filename = 'net_200.pth'
+    # save_filename = 'net_100.pth'
+    save_filename = 'net_400.pth'
+    # save_filename = 'net_600.pth'
+    # save_filename = 'net_800.pth'
+    # save_filename = 'net_900.pth'
 
     save_path = os.path.join('./model/student', out_model_name, save_filename)
     print('Load the model from %s' % save_path)

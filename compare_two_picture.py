@@ -17,7 +17,7 @@ import os
 import scipy.io
 import yaml
 import math
-from utils import load_network
+import utils
 from apex.fp16_utils import *
 
 
@@ -133,6 +133,7 @@ def load_image(model, img_path):
     ])
     image_Tensor = data_transforms(image)
     print(type(image_Tensor))
+    print(image_Tensor.shape)
     feature = torch.FloatTensor()
     ff = torch.FloatTensor(1, 512).zero_().cuda()
     # input_img = Variable(torch.unsqueeze(image_Tensor.cuda(), dim=0).float(), requires_grad=False)
@@ -178,7 +179,7 @@ if __name__ == '__main__':
     opt = init_options()
     opt, str_ids, name, test_dir = init_load_train_config(opt)
     ms = choose_gpu(opt, str_ids)
-    model, _, epoch = load_network("drone", opt)
+    model, _, epoch = utils.load_network_student('view', opt)
     # print("model=",model)
     model.classifier.classifier = nn.Sequential()
     model = model.eval()

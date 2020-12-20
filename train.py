@@ -1,6 +1,6 @@
 from __future__ import print_function, division
 
-from model import view_net, simple_CNN
+from model import view_net, simple_CNN, simple_2CNN, simple_3CNN, view_net_152
 from random_erasing import RandomErasing
 from autoaugment import ImageNetPolicy, CIFAR10Policy
 
@@ -59,7 +59,7 @@ def init_options():
     parser.add_argument('--extra_Google', default="true", action='store_true', help='using extra noise Google')
     parser.add_argument('--fp16', default="true", action='store_true',
                         help='use float16 instead of float32, which will save about 50% memory')
-    parser.add_argument('--net_type', default='kd', type=str, help='choose train teacher_net or student_net')
+    parser.add_argument('--net_type', default='student', type=str, help='choose train teacher_net or student_net')
     opt = parser.parse_args()
     return opt
 
@@ -250,7 +250,7 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
                 loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 0.5
                 # loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 0.5
                 # loss_kd = criterion_KD()
-                loss = 0.8*loss_student + 0.2*loss_kd
+                loss = 0.8 * loss_student + 0.2 * loss_kd
                 # loss = 0.99*loss_student + 0.01*loss_kd
 
                 # print(loss_student) #
@@ -390,7 +390,7 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
             if phase == 'train':
                 exp_lr_scheduler.step()
             last_model_weights = model.state_dict()
-            if epoch % 5 == 4:
+            if epoch % 2 == 0:
                 if opt.net_type == 'teacher':
                     utils.save_network_teacher(model, opt.out_model_name, epoch)
                 else:
@@ -440,20 +440,38 @@ if __name__ == '__main__':
         else:
             start_epoch = 0
             teacher_model = view_net(len(class_names), droprate=opt.droprate, stride=opt.stride, pool=opt.pool,
-                                     share_weight=opt.share, VGG19=False, RESNET152=True)
+                                     share_weight=opt.share, VGG19=False, RESNET152=True, RESNET101=False, VGG16=False)
+            # teacher_model = view_net_152(len(class_names), droprate=opt.droprate)
         dir_name = os.path.join('./model/teacher', out_model_name)
         print(teacher_model)
         teacher_model = teacher_model.cuda()
         if start_epoch >= 40:
             opt.lr = opt.lr * 0.1
         # 有些参数写多了，忽略掉
+
         ignored_params = list(map(id, teacher_model.classifier.parameters()))
         base_params = filter(lambda p: id(p) not in ignored_params, teacher_model.parameters())
+        # optimizer = torch.optim.SGD([
+        #     {'params': base_params, 'lr': 0.1 * opt.lr},
+        #     {'params': teacher_model.classifier.parameters(), 'lr': opt.lr}
+        # ], weight_decay=5e-4, momentum=0.9, nesterov=True)
+
         optimizer = torch.optim.SGD([
-            {'params': base_params, 'lr': 0.1 * opt.lr},
-            {'params': teacher_model.classifier.parameters(), 'lr': opt.lr}
+            {'params': base_params, 'lr': 0},
+            {'params': teacher_model.classifier.parameters(), 'lr': opt.lr*0.01}
         ], weight_decay=5e-4, momentum=0.9, nesterov=True)
 
+        '''
+        teacher_model.model.conv1.weight.requires_grad = False
+        teacher_model.model.bn1.weight.requires_grad = False
+        # teacher_model.model.layer1.weight.requires_grad = False
+        # teacher_model.model.layer2.weight.requires_grad = False
+        # teacher_model.model.layer3.weight.requires_grad = False
+        # teacher_model.model.layer4.weight.requires_grad = False
+        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, teacher_model.parameters()), lr=0.1)
+        # optimizer = torch.optim.SGD(teacher_model.parameters(), lr=opt.lr, weight_decay=5e-4, momentum=0.9,
+        #                             nesterov=True)
+        '''
         if not opt.resume:
             if not os.path.isdir(dir_name):
                 os.mkdir(dir_name)
@@ -470,7 +488,7 @@ if __name__ == '__main__':
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
         train_model(teacher_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
                     exp_lr_scheduler=exp_lr_scheduler, dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt,
-                    num_epochs=50)
+                    num_epochs=2)
     elif opt.net_type == 'student':
         '''如果输入指定网络类型为学生网络'''
         if opt.resume:
@@ -479,10 +497,14 @@ if __name__ == '__main__':
             start_epoch = 0
             student_model = simple_CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
                                        pool=opt.pool)
+
+        # TODO:
+        # start_epoch = 98
+
         dir_name = os.path.join('./model/student', out_model_name)
         if start_epoch >= 40:
             opt.lr = opt.lr * 0.1
-        # 有些参数写多了，忽略掉
+
         ignored_params = list(map(id, student_model.classifier.parameters()))
         base_params = filter(lambda p: id(p) not in ignored_params, student_model.parameters())
         optimizer = torch.optim.SGD([
@@ -507,10 +529,11 @@ if __name__ == '__main__':
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
         train_model(student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
                     exp_lr_scheduler=exp_lr_scheduler, dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt,
-                    num_epochs=200)
+                    num_epochs=100)
     elif opt.net_type == 'kd':
         '''如果输入指定为知识蒸馏，则读取教师模型用作推理，读取学生模型用作训练'''
-        teacher_model, _, _ = utils.load_network_teacher(opt.out_model_name, opt, RESNET18=False, RESNET152=True, VGG19=False)
+        teacher_model, _, _ = utils.load_network_teacher(opt.out_model_name, opt, RESNET18=False, RESNET152=True,
+                                                         VGG19=False)
         student_model, _, start_epoch = opt_resume_student(opt)
         teacher_model.cuda()
         teacher_model.eval()
@@ -520,7 +543,9 @@ if __name__ == '__main__':
         if start_epoch >= 40:
             opt.lr = opt.lr * 0.1
         # print("------------opt.batchsize =", opt.batchsize)
-        # 有些参数写多了，忽略掉
+
+        # start_epoch = 100
+
         ignored_params = list(map(id, student_model.classifier.parameters()))
         base_params = filter(lambda p: id(p) not in ignored_params, student_model.parameters())
         optimizer = torch.optim.SGD([
@@ -589,10 +614,10 @@ if __name__ == '__main__':
     #     train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_sizes, start_epoch, opt,
     #                 num_epochs=50)
 
-# python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type teacher;
-# python train.py --out_model_name view --droprate 0.75 --batchsize 8 --stride 1 --h 384  --w 384 --fp16 --net_type teacher --resume;
+# python train.py --out_model_name view --droprate 0.75 --batchsize 4 --stride 1 --h 384  --w 384 --fp16 --net_type teacher;
+# python train.py --out_model_name view --droprate 0.75 --batchsize 4 --stride 1 --h 384  --w 384 --fp16 --net_type teacher --resume;
 
-# python train.py --out_model_name view --droprate 0.5 --batchsize 12 --lr 0.01 --stride 1 --h 384  --w 384 --fp16 --net_type student;
-# python train.py --out_model_name view --droprate 0.5 --batchsize 12 --lr 0.01 --stride 1 --h 384  --w 384 --fp16 --net_type student --resume;
+# python train.py --out_model_name view --droprate 0.5 --batchsize 10 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type student;
+# python train.py --out_model_name view --droprate 0.5 --batchsize 10 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type student --resume;
 
 # python train.py --out_model_name view --droprate 0.5 --batchsize 6 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type kd --resume;

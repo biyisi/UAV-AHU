@@ -14,8 +14,9 @@ from apex.fp16_utils import *
 from model import view_net
 import utils
 
-QUERY_PATH ='./data/test'
+QUERY_PATH = './data/test'
 QUERY_NAME_DEFINE = 'label_view'
+# QUERY_NAME_DEFINE = 'view_all'
 
 
 def init_options():
@@ -117,16 +118,16 @@ def get_labels_paths(img_path):
     return labels, paths
 
 
-def load_train_model(opt, RESNET18=False, RESNET152=True, VGG19=False):
-    model, _, epoch = utils.load_network_teacher(opt.name, opt, RESNET18=RESNET18, RESNET152=RESNET152, VGG19=VGG19)
+def load_train_model(opt, RESNET101=False, RESNET152=True, VGG19=False, VGG16=False):
+    model, _, epoch = utils.load_network_teacher(opt.name, opt, RESNET101=RESNET101, RESNET152=RESNET152, VGG19=VGG19, VGG16=VGG16)
     # model.classifier.classifier = torch.nn.Sequential()
     model = model.eval()
     model = model.cuda()
     return model
 
 
-def load_train_model_feature(opt, RESNET18=False, RESNET152=True, VGG19=False):
-    model, _, epoch = utils.load_network_teacher(opt.name, opt, RESNET18=RESNET18, RESNET152=RESNET152, VGG19=VGG19)
+def load_train_model_feature(opt, RESNET101=False, RESNET152=True, VGG19=False, VGG16=False):
+    model, _, epoch = utils.load_network_teacher(opt.name, opt, RESNET101=RESNET101, RESNET152=RESNET152, VGG19=VGG19, VGG16=VGG16)
     model.classifier.classifier = torch.nn.Sequential()
     model = model.eval()
     model = model.cuda()
@@ -163,27 +164,67 @@ def extract_feature(model, dataloaders, ms, opt):
     return features
 
 
+'''
+    TP：(true_label == x && pre_label == x)
+    FP: (true_label != x && pre_label == x)
+    TN: (true_label != x && pre_label != x)
+    FN: (true_label == x && pre_label != x)
+'''
+
+
 def compare_label(model, dataloaders, query_labels):
     count = 0
     true_count = 0
     print("dataloaders =", dataloaders)
+    TP = [0 for i in range(0, 21)]
+    FP = [0 for i in range(0, 21)]
+    TN = [0 for i in range(0, 21)]
+    FN = [0 for i in range(0, 21)]
+    P = [0 for i in range(0, 21)]
+    R = [0 for i in range(0, 21)]
+    F1 = [0 for i in range(0, 21)]
     for data in dataloaders:
         image_tensor, label = data
         n, c, h, w = image_tensor.size()
         input_image_tensor = torch.autograd.Variable(image_tensor.cuda())
         print("input_image_tensor.shape =", input_image_tensor.shape)
         outputs = model(input_image_tensor)
-        outputs_query = torch.argmax(outputs, dim=1).cpu().numpy()
-        data_query = query_labels[count: count + n]
-        true_count += np.sum(outputs_query == np.array(data_query))
+        pre_label = torch.argmax(outputs, dim=1).cpu().numpy()
+        true_label = query_labels[count: count + n]
+
+        TP = [(TP[i] + np.sum((pre_label == i) & (np.array(true_label) == i))) for i in range(0, 21)]
+        FP = [(FP[i] + np.sum((pre_label == i) & (np.array(true_label) != i))) for i in range(0, 21)]
+        TN = [(TN[i] + np.sum((pre_label != i) & (np.array(true_label) != i))) for i in range(0, 21)]
+        FN = [(FN[i] + np.sum((pre_label != i) & (np.array(true_label) == i))) for i in range(0, 21)]
+
+        true_count += np.sum(pre_label == np.array(true_label))
         # print(np.sum(outputs_query == np.array(data_query)))
         # query_labels取[count,count+n]
         count += n
         print("count =", count)
         print("true_count =", true_count)
 
+    P = [(TP[i] / (TP[i] + FP[i])) for i in range(0, 21)]
+    R = [(TP[i] / (TP[i] + FN[i])) for i in range(0, 21)]
+    F1 = [((2 * P[i] * R[i]) / (R[i] + P[i])) for i in range(0, 21)]
+
+    tmp_p = [P[i] for i in range(0, 21) if (P[i] > 1e-6)]
+    # label_count = len([P[i] for i in range(0, 21) if (P[i] > 1e-6)])
+    label_count = len(tmp_p)
+    P_avg = sum(tmp_p) / label_count
+
+    tmp_r = [R[i] for i in range(0, 21) if (R[i] > 1e-6)]
+    label_count = len(tmp_r)
+    R_avg = sum(tmp_r) / label_count
+
+    tmp_f1 = [F1[i] for i in range(0, 21) if (F1[i] > 1e-6)]
+    label_count = len(tmp_f1)
+    F1_avg = sum(tmp_f1) / label_count
+
+    # print(label_count, P_avg, R_avg, F1_avg)
+
     true_acc = true_count / count
-    return true_acc
+    return true_acc, P_avg, R_avg, F1_avg
     # print("torch.argmax(outputs, dim=1).cpu().numpy() =", torch.argmax(outputs, dim=1).cpu().numpy())
     # print("outputs.shape =", outputs.shape)
     # print("query_labels =", query_labels)
@@ -201,7 +242,7 @@ def compare_label(model, dataloaders, query_labels):
     # pass
 
 
-def save_to_txt(query_name, query_path, true_acc):
+def save_to_txt(query_name, query_path, true_acc, P_avg, R_avg, F1_avg):
     file = open('AHU.txt', mode="a+")
     file.writelines("query_name: ")
     file.writelines(query_name)
@@ -211,6 +252,15 @@ def save_to_txt(query_name, query_path, true_acc):
     file.writelines("; ")
     file.writelines("true_acc: ")
     file.writelines(str(true_acc))
+    file.writelines("; ")
+    file.writelines("P_avg: ")
+    file.writelines(str(P_avg))
+    file.writelines("; ")
+    file.writelines("R_avg: ")
+    file.writelines(str(R_avg))
+    file.writelines("; ")
+    file.writelines("F1_avg: ")
+    file.writelines(str(F1_avg))
     file.writelines("; ")
     file.writelines('\n')
 
@@ -264,15 +314,14 @@ if __name__ == '__main__':
     image_datasets, dataloaders, use_gpu = load_data(opt, test_dir)
     start_time = time.time()
 
-    # Acc_statistics = False
-    # Feature_Savemat = True
+    Acc_statistics = False
+    Feature_Savemat = True
 
-    Acc_statistics = True
-    Feature_Savemat = False
-
+    # Acc_statistics = True
+    # Feature_Savemat = False
 
     if Acc_statistics:
-        # model = load_train_model(opt, RESNET18=False, RESNET152=True, VGG19=False)
+        # model = load_train_model(opt, RESNET101=False, RESNET152=True, VGG19=False, VGG16=False)
 
         model, _, _ = utils.load_network_student(opt.name, opt)
         model = model.eval()
@@ -286,11 +335,14 @@ if __name__ == '__main__':
         #     不会影响 dropout 和 batchnorm 层的行为
         with torch.no_grad():
             print("dataloaders[query_name] =", dataloaders[query_name])
-            true_acc = compare_label(model, dataloaders[query_name], query_labels)
-        save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/student" + QUERY_NAME_DEFINE, true_acc)
-        print(true_acc)
+            true_acc, P_avg, R_avg, F1_avg = compare_label(model, dataloaders[query_name], query_labels)
+        save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/teacher" + QUERY_NAME_DEFINE, true_acc, P_avg, R_avg,
+                    F1_avg)
+        # save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/student" + QUERY_NAME_DEFINE, true_acc, P_avg, R_avg,
+        #             F1_avg)
+        print("true_acc=%s, P_avg=%s, R_avg=%s, F1_avg=%s" % (true_acc, P_avg, R_avg, F1_avg))
     elif Feature_Savemat:
-        # model = load_train_model_feature(opt, RESNET18=False, RESNET152=True, VGG19=False)
+        # model = load_train_model_feature(opt, RESNET101=False, RESNET152=True, VGG19=False, VGG16=False)
         model = load_student_kd_model_feature(opt.name, opt)
         print(model)
         query_name = QUERY_NAME_DEFINE
@@ -298,9 +350,9 @@ if __name__ == '__main__':
         with torch.no_grad():
             print("dataloaders[query_name] =", dataloaders[query_name])
             query_features = infer_feature(model, dataloaders[query_name], ms, opt, query_labels, query_paths)
-        # mat_name = "teacher_159_"+QUERY_NAME_DEFINE + ".mat"
-        mat_name = "kd_159_"+QUERY_NAME_DEFINE + ".mat"
-        # mat_name = "student_159_"+QUERY_NAME_DEFINE + ".mat"
+        mat_name = "CNN_100+_6798_"+QUERY_NAME_DEFINE + ".mat"
+        # mat_name = "logits_159_" + QUERY_NAME_DEFINE + ".mat"
+        # mat_name = "2_conv_CNN_159_"+QUERY_NAME_DEFINE + ".mat"
         result_mat = save_matlab(query_features=query_features, query_labels=query_labels, query_paths=query_paths,
                                  mat_name=mat_name)
     # with torch.no_grad():
@@ -314,10 +366,65 @@ if __name__ == '__main__':
     # result = './model/%s/result.txt' % opt.name
 
 
+'''
+net_800.pth(6-layer 2-conv 2-pool 2-fc CNN)
+true_acc=0.8679245283018868, P_avg=0.8917921335200747, R_avg=0.8701441102756892, F1_avg=0.8710413855150698
+Recall@1:89.31 Recall@5:96.86 Recall@10:98.74 Recall@top1:93.08 AP:45.62
+
+net_900.pth(7-layer 3-conv 2-pool 2-fc CNN)
+true_acc=0.8867924528301887, P_avg=0.8945833333333334, R_avg=0.8870457393483709, F1_avg=0.8851527584365113
+Recall@1:88.05 Recall@5:95.60 Recall@10:98.11 Recall@top1:94.34 AP:42.96
+'''
+'''
+Teacher at view_all: 6798 pictures
+true_acc=0.9967637540453075, P_avg=0.9967660983367029, R_avg=0.9968275856403586, F1_avg=0.9967833504280225
+Recall@1:99.93 Recall@5:99.93 Recall@10:99.93 Recall@top1:99.94 AP:99.37
+
+net_101.pth
+true_acc=0.9451309208590762, P_avg=0.9478910924572184, R_avg=0.9444067987859067, F1_avg=0.9446860176205463
+Recall@1:99.88 Recall@5:99.96 Recall@10:99.96 Recall@top1:100.00 AP:65.89
+
+net_152.pth
+true_acc=0.9582230067666961, P_avg=0.9594975762823902, R_avg=0.9576663379779711, F1_avg=0.9575972875413324
+Recall@1:99.93 Recall@5:99.99 Recall@10:99.99 Recall@top1:100.00 AP:74.69
+
+net_116.pth
+true_acc=0.9720506031185643, P_avg=0.9747165303664447, R_avg=0.9715782843016385, F1_avg=0.9725558789937051
+Recall@1:99.59 Recall@5:99.81 Recall@10:99.91 Recall@top1:99.97 AP:93.86
+
+net_119.pth
+true_acc=0.9571932921447485, P_avg=0.9614941984839452, R_avg=0.9563725410752164, F1_avg=0.9572984997364173
+Recall@1:99.65 Recall@5:99.88 Recall@10:99.91 Recall@top1:99.97 AP:88.74
+
+label_view: 159 pictures
+net_50.pth(Teacher):
+true_acc=0.9937106918238994, P_avg=1.0, R_avg=0.9940476190476191, F1_avg=0.9969512195121951 Recall@1:100.00
+net_200.pth(Student):
+true_acc=0.8364779874213837, P_avg=0.8517617072572737, R_avg=0.8397556390977443, F1_avg=0.8363099058622164 Recall@1:86.16
+net_400.pth(ST):
+true_acc=0.9308176100628931, P_avg=0.9386320915926178, R_avg=0.9321115288220552, F1_avg=0.9308368379206813 Recall@1:89.94
+net_600.pth(Logits):
+true_acc=0.8930817610062893, P_avg=0.9039468794617536, R_avg=0.8951754385964912, F1_avg=0.8930194424187559 Recall@1:86.79
+
+net_100(300+ train)
+true_acc=0.8238993710691824, P_avg=0.8290762186981816, R_avg=0.8234335839598997, F1_avg=0.8222807991435552
+Recall@1:84.28 Recall@5:93.08 Recall@10:96.86 Recall@top1:90.57 AP:39.93
+
+net_100(200+ train)
+true_acc=0.7547169811320755, P_avg=0.7704408212560386, R_avg=0.7530388471177945, F1_avg=0.7544683068541016
+Recall@1:83.65 Recall@5:91.19 Recall@10:97.48 Recall@top1:88.68 AP:39.16
+
+net_100(100+ train)
+true_acc=0.5849056603773585, P_avg=0.6335807656395892, R_avg=0.5855889724310778, F1_avg=0.5875416883189757
+Recall@1:78.62 Recall@5:90.57 Recall@10:94.34 Recall@top1:87.42 AP:37.03
+'''
+
 '''训练集449张图片，知识蒸馏方法：SoftTarget。 温度：4，Alpha：0.85。测试集准确率如下'''
 # net_200.pth(Student) 0.850412249705536
 # net_400.pth(BestKD) 0.9128386336866903
 # net_50.pth(Teacher) 0.9956811935610522
+# net_600.pth(Logits) 0.8657243816254417
+
 '''使用含有8个label的全部测试图片组成的测试集进行测试的结果，特征提取对比'''
 # teacher_len = 2547
 # round(teacher_len * 0.01) = 25
@@ -333,6 +440,8 @@ if __name__ == '__main__':
 # net_200.pth(Student) 0.8364779874213837
 # net_400.pth(BestKD) 0.9308176100628931
 # net_50.pth(Teacher) 0.9937106918238994
+# net_600.pth(Logits) 0.8930817610062893
+
 '''使用含有8个label的裁减后测试集label_view, 159张测试集照片进行测试的结果，特征提取对比'''
 # teacher_len = 159
 # round(teacher_len * 0.01) = 2
@@ -343,5 +452,6 @@ if __name__ == '__main__':
 # kd_len = 159
 # round(kd_len * 0.01) = 2
 # Recall@1:89.94 Recall@5:96.23 Recall@10:98.11 Recall@top1:94.97 AP:47.57
-
-
+# logits_len = 159
+# round(logits_len * 0.01) = 2
+# Recall@1:86.79 Recall@5:95.60 Recall@10:96.23 Recall@top1:93.71 AP:43.73
