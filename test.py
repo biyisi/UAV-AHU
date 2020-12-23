@@ -317,8 +317,8 @@ if __name__ == '__main__':
     Acc_statistics = False
     Feature_Savemat = True
 
-    # Acc_statistics = True
-    # Feature_Savemat = False
+    Acc_statistics = True
+    Feature_Savemat = False
 
     if Acc_statistics:
         # model = load_train_model(opt, RESNET101=False, RESNET152=True, VGG19=False, VGG16=False)
@@ -350,11 +350,12 @@ if __name__ == '__main__':
         with torch.no_grad():
             print("dataloaders[query_name] =", dataloaders[query_name])
             query_features = infer_feature(model, dataloaders[query_name], ms, opt, query_labels, query_paths)
-        mat_name = "CNN_100+_6798_"+QUERY_NAME_DEFINE + ".mat"
+        # mat_name = "CNN_100+_6798_"+QUERY_NAME_DEFINE + ".mat"
         # mat_name = "logits_159_" + QUERY_NAME_DEFINE + ".mat"
-        # mat_name = "2_conv_CNN_159_"+QUERY_NAME_DEFINE + ".mat"
+        mat_name = "test_conv_159_"+QUERY_NAME_DEFINE + ".mat"
         result_mat = save_matlab(query_features=query_features, query_labels=query_labels, query_paths=query_paths,
                                  mat_name=mat_name)
+        os.system("python evaluate_gpu_1_ctx.py")
     # with torch.no_grad():
     #     query_feature = extract_feature(model, dataloaders[query_name], ms, opt)
     # end_time = time.time()
@@ -364,6 +365,48 @@ if __name__ == '__main__':
     # result_mat = save_matlab(query_feature, query_labels, query_paths)
     # print(opt.name)
     # result = './model/%s/result.txt' % opt.name
+
+'''
+net_7CNN.pth:
+true_acc=0.9371069182389937, P_avg=0.9417744996549344, R_avg=0.9364818295739348, F1_avg=0.9368847257389515
+Recall@1:93.71 Recall@5:96.86 Recall@10:96.86 Recall@top1:96.86 AP:84.04
+
+net_res_18.pth
+true_acc=0.949685534591195, P_avg=0.9567070158102766, R_avg=0.9499060150375939, F1_avg=0.9500847377836362
+Recall@1:98.74 Recall@5:100.00 Recall@10:100.00 Recall@top1:100.00 AP:81.99
+'''
+
+
+'''
+net_100+.pth:
+true_acc=0.7044025157232704, P_avg=0.7655662454375689, R_avg=0.7019893483709273, F1_avg=0.7068251063951133
+Recall@1:78.62 Recall@5:91.19 Recall@10:94.34 Recall@top1:89.94 AP:37.97
+
+net_200+.pth:
+true_acc=0.7735849056603774, P_avg=0.7953907852484078, R_avg=0.7733709273182958, F1_avg=0.77171601230715
+Recall@1:88.68 Recall@5:96.86 Recall@10:98.74 Recall@top1:94.97 AP:42.30
+
+net_300+.pth:
+true_acc=0.8238993710691824, P_avg=0.8631528850278851, R_avg=0.8272556390977444, F1_avg=0.8306750427493462
+Recall@1:89.31 Recall@5:97.48 Recall@10:98.74 Recall@top1:93.08 AP:44.82
+
+net_400+.pth:
+true_acc=0.8930817610062893, P_avg=0.9069183375104428, R_avg=0.89484649122807, F1_avg=0.8948964106618149
+Recall@1:91.82 Recall@5:96.23 Recall@10:100.00 Recall@top1:95.60 AP:45.61
+
+net_500.pth(Logits):
+true_acc=0.9182389937106918, P_avg=0.927237477752352, R_avg=0.9205043859649124, F1_avg=0.9186471981722303
+Recall@1:91.19 Recall@5:96.23 Recall@10:98.74 Recall@top1:94.97 AP:47.52
+
+net_999.pth(ST):
+true_acc=0.9622641509433962, P_avg=0.9651848866236739, R_avg=0.962468671679198, F1_avg=0.9625454739681387
+Recall@1:92.45 Recall@5:98.11 Recall@10:100.00 Recall@top1:97.48 AP:54.09
+'''
+
+
+
+
+
 
 
 '''
@@ -406,15 +449,15 @@ true_acc=0.9308176100628931, P_avg=0.9386320915926178, R_avg=0.9321115288220552,
 net_600.pth(Logits):
 true_acc=0.8930817610062893, P_avg=0.9039468794617536, R_avg=0.8951754385964912, F1_avg=0.8930194424187559 Recall@1:86.79
 
-net_100(300+ train)
+net_300+(300+ train)
 true_acc=0.8238993710691824, P_avg=0.8290762186981816, R_avg=0.8234335839598997, F1_avg=0.8222807991435552
 Recall@1:84.28 Recall@5:93.08 Recall@10:96.86 Recall@top1:90.57 AP:39.93
 
-net_100(200+ train)
+net_200+(200+ train)
 true_acc=0.7547169811320755, P_avg=0.7704408212560386, R_avg=0.7530388471177945, F1_avg=0.7544683068541016
 Recall@1:83.65 Recall@5:91.19 Recall@10:97.48 Recall@top1:88.68 AP:39.16
 
-net_100(100+ train)
+net_100+(100+ train)
 true_acc=0.5849056603773585, P_avg=0.6335807656395892, R_avg=0.5855889724310778, F1_avg=0.5875416883189757
 Recall@1:78.62 Recall@5:90.57 Recall@10:94.34 Recall@top1:87.42 AP:37.03
 '''
@@ -441,6 +484,16 @@ Recall@1:78.62 Recall@5:90.57 Recall@10:94.34 Recall@top1:87.42 AP:37.03
 # net_400.pth(BestKD) 0.9308176100628931
 # net_50.pth(Teacher) 0.9937106918238994
 # net_600.pth(Logits) 0.8930817610062893
+
+# resnet_18(400 epoch)
+# true_acc=0.9559748427672956, P_avg=0.9589348866236738, R_avg=0.9558897243107769, F1_avg=0.9557742796969445
+# Recall@1:96.23 Recall@5:97.48 Recall@10:97.48 Recall@top1:96.86 AP:87.23
+
+
+# net_res18.pth
+# true_acc=0.9433962264150944, P_avg=0.9482142857142858, R_avg=0.9461309523809525, F1_avg=0.9426203877423389
+# Recall@1:100.00 Recall@5:100.00 Recall@10:100.00 Recall@top1:100.00 AP:86.59
+
 
 '''使用含有8个label的裁减后测试集label_view, 159张测试集照片进行测试的结果，特征提取对比'''
 # teacher_len = 159

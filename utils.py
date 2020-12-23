@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
-from model import view_net, simple_CNN, simple_2CNN, simple_3CNN
+from model import view_net, simple_CNN, simple_2CNN, simple_3CNN, simple_res, simple_resnet_18
 
 import os
 import torch
@@ -225,7 +225,7 @@ def load_network_teacher(out_model_name, opt, RESNET152=True, RESNET101=False, V
     else:
         save_filename = 'net_%s.pth' % epoch
 
-    # save_filename = 'net_002.pth'
+    save_filename = 'net_050.pth'
 
     save_path = os.path.join('./model/teacher', out_model_name, save_filename)
     print('Load the model from %s' % save_path)
@@ -258,7 +258,8 @@ def load_network_student(out_model_name, opt):
 
     opt = config_to_opt(config, opt)
 
-    model = simple_CNN(num_classes=opt.nclasses, droprate=opt.droprate, stride=opt.stride, pool=opt.pool)
+    # TODO: 修改加载模型
+    model = simple_2CNN(num_classes=opt.nclasses, droprate=opt.droprate, stride=opt.stride, pool=opt.pool)
 
     # load model
     if isinstance(epoch, int):
@@ -266,8 +267,8 @@ def load_network_student(out_model_name, opt):
     else:
         save_filename = 'net_%s.pth' % epoch
 
-    # save_filename = 'net_100.pth'
-    save_filename = 'net_400.pth'
+    save_filename = 'net_000.pth'
+    # save_filename = 'net_400.pth'
     # save_filename = 'net_600.pth'
     # save_filename = 'net_800.pth'
     # save_filename = 'net_900.pth'

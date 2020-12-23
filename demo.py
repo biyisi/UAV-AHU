@@ -1,4 +1,6 @@
 import argparse
+import time
+
 import scipy.io
 import torch
 import numpy as np
@@ -9,7 +11,7 @@ from PIL import Image
 from torchvision import datasets
 import matplotlib
 import matplotlib.pyplot as plt
-from model import simple_CNN, simple_2CNN, simple_3CNN
+from model import simple_CNN, simple_2CNN, simple_3CNN, view_net
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
@@ -40,16 +42,19 @@ def load_model():
     save_path = os.path.join('./model/student', 'view', save_filename)
     net.load_state_dict(torch.load(save_path))
     net.eval()
-    net.cuda()
+    # net.cuda()
+    net.cpu()
     return net
 
-
-def load_data():
-    pass
-
-
-def save_fig():
-    pass
+def load_model_teacher():
+    net = view_net(class_num=21, droprate=0.5, stride=1, pool='avg')
+    save_filename = 'net_050.pth'
+    save_path = os.path.join('./model/teacher', 'view', save_filename)
+    net.load_state_dict(torch.load(save_path))
+    net.eval()
+    # net.cuda()
+    net.cpu()
+    return net
 
 
 def pre_label(model, input_img_path):
@@ -60,7 +65,8 @@ def pre_label(model, input_img_path):
     ])
     input_img = data_transforms(Image.open(input_img_path).convert('RGB'))
     # input_img_Tensor = data_transforms(input_img)
-    input_img_Tensor = Variable(torch.unsqueeze(input_img.cuda(), dim=0).float(), requires_grad=False)
+    # input_img_Tensor = Variable(torch.unsqueeze(input_img.cuda(), dim=0).float(), requires_grad=False)
+    input_img_Tensor = Variable(torch.unsqueeze(input_img.cpu(), dim=0).float(), requires_grad=False)
     # print(input_img_Tensor.shape)
     outputs_Tensor = model(input_img_Tensor)
     predict_label = torch.argmax(outputs_Tensor, dim=1).cpu().numpy()
@@ -135,29 +141,29 @@ def visualize_result_graph(street_img_path, street_label, drone_img_path_list, d
 
 
 def load_demo_imgdir_v2():
-    street_img_path = './data/demo/street/02_street_52.jpg'
-    drone_img_v1_path = './data/demo/drone_v2/02_drone_4.jpg'
-    drone_img_v2_path = './data/demo/drone_v2/02_drone_17.jpg'
-    drone_img_v3_path = './data/demo/drone_v2/02_drone_56.jpg'
-    drone_img_v4_path = './data/demo/drone_v2/02_drone_59.jpg'
-    drone_img_v5_path = './data/demo/drone_v2/02_drone_79.jpg'
-    drone_img_v6_path = './data/demo/drone_v2/02_drone_87.jpg'
-    drone_img_v7_path = './data/demo/drone_v2/02_drone_105.jpg'
-    drone_img_v8_path = './data/demo/drone_v2/02_drone_127.jpg'
-    drone_img_v9_path = './data/demo/drone_v2/02_drone_150.jpg'
-    drone_img_v10_path = './data/demo/drone_v2/02_drone_154.jpg'
+    # street_img_path = './data/demo/street/02_street_52.jpg'
+    # drone_img_v1_path = './data/demo/drone_v2/02_drone_4.jpg'
+    # drone_img_v2_path = './data/demo/drone_v2/02_drone_17.jpg'
+    # drone_img_v3_path = './data/demo/drone_v2/02_drone_56.jpg'
+    # drone_img_v4_path = './data/demo/drone_v2/02_drone_59.jpg'
+    # drone_img_v5_path = './data/demo/drone_v2/02_drone_79.jpg'
+    # drone_img_v6_path = './data/demo/drone_v2/02_drone_87.jpg'
+    # drone_img_v7_path = './data/demo/drone_v2/02_drone_105.jpg'
+    # drone_img_v8_path = './data/demo/drone_v2/02_drone_127.jpg'
+    # drone_img_v9_path = './data/demo/drone_v2/02_drone_150.jpg'
+    # drone_img_v10_path = './data/demo/drone_v2/02_drone_154.jpg'
 
-    # street_img_path = './data/demo_v1/street/image_937.jpg'
-    # drone_img_v1_path = './data/demo_v1/drone_v2/07_drone_3.jpg'
-    # drone_img_v2_path = './data/demo_v1/drone_v2/07_drone_10.jpg'
-    # drone_img_v3_path = './data/demo_v1/drone_v2/07_drone_11.jpg'
-    # drone_img_v4_path = './data/demo_v1/drone_v2/07_drone_23.jpg'
-    # drone_img_v5_path = './data/demo_v1/drone_v2/07_drone_53.jpg'
-    # drone_img_v6_path = './data/demo_v1/drone_v2/07_drone_54.jpg'
-    # drone_img_v7_path = './data/demo_v1/drone_v2/07_drone_55.jpg'
-    # drone_img_v8_path = './data/demo_v1/drone_v2/07_drone_58.jpg'
-    # drone_img_v9_path = './data/demo_v1/drone_v2/07_drone_95.jpg'
-    # drone_img_v10_path = './data/demo_v1/drone_v2/07_drone_123.jpg'
+    street_img_path = './data/demo_v1/street/image_937.jpg'
+    drone_img_v1_path = './data/demo_v1/drone_v2/07_drone_3.jpg'
+    drone_img_v2_path = './data/demo_v1/drone_v2/07_drone_10.jpg'
+    drone_img_v3_path = './data/demo_v1/drone_v2/07_drone_11.jpg'
+    drone_img_v4_path = './data/demo_v1/drone_v2/07_drone_23.jpg'
+    drone_img_v5_path = './data/demo_v1/drone_v2/07_drone_53.jpg'
+    drone_img_v6_path = './data/demo_v1/drone_v2/07_drone_54.jpg'
+    drone_img_v7_path = './data/demo_v1/drone_v2/07_drone_55.jpg'
+    drone_img_v8_path = './data/demo_v1/drone_v2/07_drone_58.jpg'
+    drone_img_v9_path = './data/demo_v1/drone_v2/07_drone_95.jpg'
+    drone_img_v10_path = './data/demo_v1/drone_v2/07_drone_123.jpg'
 
     drone_img_path_list = [drone_img_v1_path, drone_img_v2_path, drone_img_v3_path, drone_img_v4_path,
                            drone_img_v5_path, drone_img_v6_path, drone_img_v7_path, drone_img_v8_path,
@@ -285,22 +291,21 @@ def visualize_result_graph_v3(street_img_path_v2, drone_img_path_list_v2, score_
 
 
 if __name__ == '__main__':
+    # model = load_model_teacher()
     model = load_model()
 
-    print("--")
-    model.cpu()
-    torch.cuda.empty_cache()
-    print("---")
-
     # # TODO: demo_v1: street_view -> different label drone_view
-    # street_img_path, drone_img_path_list = load_demo_imgdir()
-    # street_label, drone_label_list = predict_label(model,street_img_path, drone_img_path_list)
+    street_img_path, drone_img_path_list = load_demo_imgdir()
+    # start_time = time.time()
+    street_label, drone_label_list = predict_label(model,street_img_path, drone_img_path_list)
     # visualize_result_graph(street_img_path, street_label, drone_img_path_list, drone_label_list,
     #                        save_name='demo_v3.jpg')
+    # end_time = time.time()
+    # print(end_time-start_time)
 
     # model.classifier.classifier = nn.Sequential()
-    # # TODO: demo_v2: street_view -> different drone_view from true label building
+    # # # TODO: demo_v2: street_view -> different drone_view from true label building
     # street_img_path_v2, drone_img_path_list_v2 = load_demo_imgdir_v2()
     # score_list = compare_feature(model, street_img_path_v2, drone_img_path_list_v2)
     # # visualize_result_graph_v2(street_img_path_v2, drone_img_path_list_v2, maxscore_num, save_name='demo_v4.jpg')
-    # visualize_result_graph_v3(street_img_path_v2, drone_img_path_list_v2, score_list, save_name='demo_v5.jpg')
+    # visualize_result_graph_v3(street_img_path_v2, drone_img_path_list_v2, score_list, save_name='demo_teacher.jpg')

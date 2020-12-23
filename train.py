@@ -1,6 +1,6 @@
 from __future__ import print_function, division
 
-from model import view_net, simple_CNN, simple_2CNN, simple_3CNN, view_net_152
+from model import view_net, simple_CNN, simple_2CNN, simple_3CNN, view_net_152, simple_res, simple_resnet_18
 from random_erasing import RandomErasing
 from autoaugment import ImageNetPolicy, CIFAR10Policy
 
@@ -247,10 +247,10 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
                     outputs_teacher = teacher_model(inputs)
                 # outputs_teacher1 = teacher_model(inputs)
 
-                loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 0.5
+                loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 1.0
                 # loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 0.5
                 # loss_kd = criterion_KD()
-                loss = 0.8 * loss_student + 0.2 * loss_kd
+                loss = 0.15 * loss_student + 0.85 * loss_kd
                 # loss = 0.99*loss_student + 0.01*loss_kd
 
                 # print(loss_student) #
@@ -495,11 +495,11 @@ if __name__ == '__main__':
             student_model, opt, start_epoch = opt_resume_student(opt)
         else:
             start_epoch = 0
-            student_model = simple_CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
+            student_model = simple_2CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
                                        pool=opt.pool)
 
         # TODO:
-        # start_epoch = 98
+        # start_epoch = 356
 
         dir_name = os.path.join('./model/student', out_model_name)
         if start_epoch >= 40:
@@ -508,7 +508,8 @@ if __name__ == '__main__':
         ignored_params = list(map(id, student_model.classifier.parameters()))
         base_params = filter(lambda p: id(p) not in ignored_params, student_model.parameters())
         optimizer = torch.optim.SGD([
-            {'params': base_params, 'lr': 0.1 * opt.lr},
+            # {'params': base_params, 'lr': 0.1 * opt.lr},
+            {'params': base_params, 'lr': 0},
             {'params': student_model.classifier.parameters(), 'lr': opt.lr}
         ], weight_decay=5e-4, momentum=0.9, nesterov=True)
 
@@ -529,10 +530,10 @@ if __name__ == '__main__':
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
         train_model(student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
                     exp_lr_scheduler=exp_lr_scheduler, dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt,
-                    num_epochs=100)
+                    num_epochs=400)
     elif opt.net_type == 'kd':
         '''如果输入指定为知识蒸馏，则读取教师模型用作推理，读取学生模型用作训练'''
-        teacher_model, _, _ = utils.load_network_teacher(opt.out_model_name, opt, RESNET18=False, RESNET152=True,
+        teacher_model, _, _ = utils.load_network_teacher(opt.out_model_name, opt, RESNET101=False, RESNET152=True,
                                                          VGG19=False)
         student_model, _, start_epoch = opt_resume_student(opt)
         teacher_model.cuda()
@@ -540,11 +541,11 @@ if __name__ == '__main__':
         student_model.cuda()
         student_model.train()
         dir_name = os.path.join('./model/kd', out_model_name)
-        if start_epoch >= 40:
-            opt.lr = opt.lr * 0.1
+        # if start_epoch >= 40:
+        #     opt.lr = opt.lr * 0.1
         # print("------------opt.batchsize =", opt.batchsize)
 
-        # start_epoch = 100
+        # start_epoch = 80
 
         ignored_params = list(map(id, student_model.classifier.parameters()))
         base_params = filter(lambda p: id(p) not in ignored_params, student_model.parameters())
@@ -560,7 +561,7 @@ if __name__ == '__main__':
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
         train_model_kd(teacher_model, student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
                        exp_lr_scheduler=exp_lr_scheduler,
-                       dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt, num_epochs=20000)
+                       dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt, num_epochs=1000)
 
     # if not opt.resume:
     #     if not os.path.isdir(dir_name):
@@ -617,7 +618,10 @@ if __name__ == '__main__':
 # python train.py --out_model_name view --droprate 0.75 --batchsize 4 --stride 1 --h 384  --w 384 --fp16 --net_type teacher;
 # python train.py --out_model_name view --droprate 0.75 --batchsize 4 --stride 1 --h 384  --w 384 --fp16 --net_type teacher --resume;
 
-# python train.py --out_model_name view --droprate 0.5 --batchsize 10 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type student;
-# python train.py --out_model_name view --droprate 0.5 --batchsize 10 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type student --resume;
+# python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type student;
+# python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type student --resume;
 
-# python train.py --out_model_name view --droprate 0.5 --batchsize 6 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type kd --resume;
+# python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type kd --resume;
+
+
+# python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.1 --stride 2 --h 384  --w 384 --fp16 --net_type student;

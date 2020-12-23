@@ -80,7 +80,7 @@ if __name__ == '__main__':
     # result = scipy.io.loadmat('satellite->drone.mat')
     # result = scipy.io.loadmat('drone->satellite_new.mat')
 
-    result_logits_view = scipy.io.loadmat('CNN_100+_6798_label_view.mat')
+    result_logits_view = scipy.io.loadmat('test_conv_159_label_view.mat')
     logits_feature = torch.FloatTensor(result_logits_view['query_feature'])
     logits_feature.cuda()
     logits_label = result_logits_view['query_label'][0]
