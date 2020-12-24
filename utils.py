@@ -267,7 +267,7 @@ def load_network_student(out_model_name, opt):
     else:
         save_filename = 'net_%s.pth' % epoch
 
-    save_filename = 'net_000.pth'
+    # save_filename = 'net_000.pth'
     # save_filename = 'net_400.pth'
     # save_filename = 'net_600.pth'
     # save_filename = 'net_800.pth'
