@@ -317,8 +317,8 @@ if __name__ == '__main__':
     Acc_statistics = False
     Feature_Savemat = True
 
-    Acc_statistics = True
-    Feature_Savemat = False
+    # Acc_statistics = True
+    # Feature_Savemat = False
 
     if Acc_statistics:
         # model = load_train_model(opt, RESNET101=False, RESNET152=True, VGG19=False, VGG16=False)
@@ -336,10 +336,10 @@ if __name__ == '__main__':
         with torch.no_grad():
             print("dataloaders[query_name] =", dataloaders[query_name])
             true_acc, P_avg, R_avg, F1_avg = compare_label(model, dataloaders[query_name], query_labels)
-        save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/teacher" + QUERY_NAME_DEFINE, true_acc, P_avg, R_avg,
-                    F1_avg)
-        # save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/student" + QUERY_NAME_DEFINE, true_acc, P_avg, R_avg,
+        # save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/teacher" + QUERY_NAME_DEFINE, true_acc, P_avg, R_avg,
         #             F1_avg)
+        save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/student" + QUERY_NAME_DEFINE, true_acc, P_avg, R_avg,
+                    F1_avg)
         print("true_acc=%s, P_avg=%s, R_avg=%s, F1_avg=%s" % (true_acc, P_avg, R_avg, F1_avg))
     elif Feature_Savemat:
         # model = load_train_model_feature(opt, RESNET101=False, RESNET152=True, VGG19=False, VGG16=False)
@@ -352,7 +352,8 @@ if __name__ == '__main__':
             query_features = infer_feature(model, dataloaders[query_name], ms, opt, query_labels, query_paths)
         # mat_name = "CNN_100+_6798_"+QUERY_NAME_DEFINE + ".mat"
         # mat_name = "logits_159_" + QUERY_NAME_DEFINE + ".mat"
-        mat_name = "test_conv_159_"+QUERY_NAME_DEFINE + ".mat"
+        # mat_name = "test_conv_159_"+QUERY_NAME_DEFINE + ".mat"
+        mat_name = "test_4CNN_159_200+train_" + QUERY_NAME_DEFINE + ".mat"
         result_mat = save_matlab(query_features=query_features, query_labels=query_labels, query_paths=query_paths,
                                  mat_name=mat_name)
         os.system("python evaluate_gpu_1_ctx.py")
@@ -394,18 +395,12 @@ net_400+.pth:
 true_acc=0.8930817610062893, P_avg=0.9069183375104428, R_avg=0.89484649122807, F1_avg=0.8948964106618149
 Recall@1:91.82 Recall@5:96.23 Recall@10:100.00 Recall@top1:95.60 AP:45.61
 
-net_500.pth(Logits):
-true_acc=0.9182389937106918, P_avg=0.927237477752352, R_avg=0.9205043859649124, F1_avg=0.9186471981722303
-Recall@1:91.19 Recall@5:96.23 Recall@10:98.74 Recall@top1:94.97 AP:47.52
+
 
 net_999.pth(ST):
 true_acc=0.9622641509433962, P_avg=0.9651848866236739, R_avg=0.962468671679198, F1_avg=0.9625454739681387
 Recall@1:92.45 Recall@5:98.11 Recall@10:100.00 Recall@top1:97.48 AP:54.09
 '''
-
-
-
-
 
 
 
@@ -439,28 +434,50 @@ net_119.pth
 true_acc=0.9571932921447485, P_avg=0.9614941984839452, R_avg=0.9563725410752164, F1_avg=0.9572984997364173
 Recall@1:99.65 Recall@5:99.88 Recall@10:99.91 Recall@top1:99.97 AP:88.74
 
-label_view: 159 pictures
-net_50.pth(Teacher):
-true_acc=0.9937106918238994, P_avg=1.0, R_avg=0.9940476190476191, F1_avg=0.9969512195121951 Recall@1:100.00
-net_200.pth(Student):
-true_acc=0.8364779874213837, P_avg=0.8517617072572737, R_avg=0.8397556390977443, F1_avg=0.8363099058622164 Recall@1:86.16
-net_400.pth(ST):
-true_acc=0.9308176100628931, P_avg=0.9386320915926178, R_avg=0.9321115288220552, F1_avg=0.9308368379206813 Recall@1:89.94
-net_600.pth(Logits):
-true_acc=0.8930817610062893, P_avg=0.9039468794617536, R_avg=0.8951754385964912, F1_avg=0.8930194424187559 Recall@1:86.79
+# 2CNN_200+train_st
+net_1459.pth
+Recall@1:94.34 Recall@5:97.48 Recall@10:98.11 Recall@top1:97.48 AP:50.68
+true_acc=0.9308176100628931, P_avg=0.9442971380471381, R_avg=0.9318139097744361, F1_avg=0.9326391129063677
 
-net_300+(300+ train)
-true_acc=0.8238993710691824, P_avg=0.8290762186981816, R_avg=0.8234335839598997, F1_avg=0.8222807991435552
-Recall@1:84.28 Recall@5:93.08 Recall@10:96.86 Recall@top1:90.57 AP:39.93
+# 2CNN_200+train_logits
+net_269.pth
+Recall@1:91.19 Recall@5:97.48 Recall@10:98.74 Recall@top1:96.86 AP:53.39
+true_acc=0.8616352201257862, P_avg=0.8688042186571598, R_avg=0.8619517543859648, F1_avg=0.8623239082694406
 
-net_200+(200+ train)
-true_acc=0.7547169811320755, P_avg=0.7704408212560386, R_avg=0.7530388471177945, F1_avg=0.7544683068541016
-Recall@1:83.65 Recall@5:91.19 Recall@10:97.48 Recall@top1:88.68 AP:39.16
+# 2CNN_300+train_st
+net_619.pth
+Recall@1:94.34 Recall@5:98.11 Recall@10:98.74 Recall@top1:98.11 AP:51.17
+true_acc=0.9308176100628931, P_avg=0.9410943223443223, R_avg=0.9324404761904762, F1_avg=0.9317752866864745
 
-net_100+(100+ train)
-true_acc=0.5849056603773585, P_avg=0.6335807656395892, R_avg=0.5855889724310778, F1_avg=0.5875416883189757
-Recall@1:78.62 Recall@5:90.57 Recall@10:94.34 Recall@top1:87.42 AP:37.03
 '''
+
+
+
+
+
+
+# label_view: 159 pictures
+# net_50.pth(Teacher):
+# true_acc=0.9937106918238994, P_avg=1.0, R_avg=0.9940476190476191, F1_avg=0.9969512195121951 Recall@1:100.00
+# net_200.pth(Student):
+# true_acc=0.8364779874213837, P_avg=0.8517617072572737, R_avg=0.8397556390977443, F1_avg=0.8363099058622164 Recall@1:86.16
+# net_400.pth(ST):
+# true_acc=0.9308176100628931, P_avg=0.9386320915926178, R_avg=0.9321115288220552, F1_avg=0.9308368379206813 Recall@1:89.94
+# net_600.pth(Logits):
+# true_acc=0.8930817610062893, P_avg=0.9039468794617536, R_avg=0.8951754385964912, F1_avg=0.8930194424187559 Recall@1:86.79
+#
+# net_300+(300+ train)
+# true_acc=0.8238993710691824, P_avg=0.8290762186981816, R_avg=0.8234335839598997, F1_avg=0.8222807991435552
+# Recall@1:84.28 Recall@5:93.08 Recall@10:96.86 Recall@top1:90.57 AP:39.93
+#
+# net_200+(200+ train)
+# true_acc=0.7547169811320755, P_avg=0.7704408212560386, R_avg=0.7530388471177945, F1_avg=0.7544683068541016
+# Recall@1:83.65 Recall@5:91.19 Recall@10:97.48 Recall@top1:88.68 AP:39.16
+#
+# net_100+(100+ train)
+# true_acc=0.5849056603773585, P_avg=0.6335807656395892, R_avg=0.5855889724310778, F1_avg=0.5875416883189757
+# Recall@1:78.62 Recall@5:90.57 Recall@10:94.34 Recall@top1:87.42 AP:37.03
+
 
 '''训练集449张图片，知识蒸馏方法：SoftTarget。 温度：4，Alpha：0.85。测试集准确率如下'''
 # net_200.pth(Student) 0.850412249705536
@@ -508,3 +525,44 @@ Recall@1:78.62 Recall@5:90.57 Recall@10:94.34 Recall@top1:87.42 AP:37.03
 # logits_len = 159
 # round(logits_len * 0.01) = 2
 # Recall@1:86.79 Recall@5:95.60 Recall@10:96.23 Recall@top1:93.71 AP:43.73
+
+
+# net_500.pth(Logits,error):
+# true_acc=0.9182389937106918, P_avg=0.927237477752352, R_avg=0.9205043859649124, F1_avg=0.9186471981722303
+# Recall@1:91.19 Recall@5:96.23 Recall@10:98.74 Recall@top1:94.97 AP:47.52
+
+'''
+# 2CNN_200+train_st
+net_215.pth
+Recall@1:93.08 Recall@5:97.48 Recall@10:98.74 Recall@top1:96.86 AP:49.57
+true_acc=0.9308176100628931, P_avg=0.9396135265700483, R_avg=0.9311873433583959, F1_avg=0.9308085554796081
+
+# 2CNN_200+train_logits
+net_269.pth
+Recall@1:91.19 Recall@5:97.48 Recall@10:98.74 Recall@top1:96.86 AP:53.39
+true_acc=0.8616352201257862, P_avg=0.8688042186571598, R_avg=0.8619517543859648, F1_avg=0.8623239082694406
+
+
+
+# 2CNN_300+train_st
+net_619.pth
+Recall@1:94.34 Recall@5:98.11 Recall@10:98.74 Recall@top1:98.11 AP:51.17
+true_acc=0.9308176100628931, P_avg=0.9410943223443223, R_avg=0.9324404761904762, F1_avg=0.9317752866864745
+
+# 2CNN_300+train_logits
+net_364.pth
+Recall@1:93.71 Recall@5:97.48 Recall@10:99.37 Recall@top1:96.86 AP:55.20
+true_acc=0.8930817610062893, P_avg=0.9056745398850663, R_avg=0.894251253132832, F1_avg=0.8942368157881782
+
+
+
+# 2CNN_400+train_st
+net_499.pth
+Recall@1:92.45 Recall@5:98.11 Recall@10:100.00 Recall@top1:97.48 AP:54.09
+true_acc=0.9622641509433962, P_avg=0.9651848866236739, R_avg=0.962468671679198, F1_avg=0.9625454739681387
+
+# 2CNN_400+train_logits
+net_466.pth
+Recall@1:94.34 Recall@5:98.11 Recall@10:98.74 Recall@top1:96.23 AP:56.40
+true_acc=0.9182389937106918, P_avg=0.9251875668789116, R_avg=0.9199091478696743, F1_avg=0.9182240427650463
+'''

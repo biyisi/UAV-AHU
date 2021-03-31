@@ -1,6 +1,6 @@
 from __future__ import print_function, division
 
-from model import view_net, simple_CNN, simple_2CNN, simple_3CNN, view_net_152, simple_res, simple_resnet_18
+from model import view_net, simple_CNN, simple_2CNN, simple_3CNN, view_net_152, simple_resnet_18, simple_10CNN, simple_resnet_50
 from random_erasing import RandomErasing
 from autoaugment import ImageNetPolicy, CIFAR10Policy
 
@@ -202,8 +202,8 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
                    start_epoch, opt,
                    num_epochs=25):
     start_time = time.time()
-    criterionKD = utils.Logits()
-    # criterionKD = utils.SoftTarget(4.0)
+    # criterionKD = utils.Logits()
+    criterionKD = utils.SoftTarget(4.0)
 
     for epoch in range(num_epochs - start_epoch):
         epoch = epoch + start_epoch
@@ -251,7 +251,7 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
                 # loss_kd = criterionKD(outputs_student, outputs_teacher.detach()) * 0.5
                 # loss_kd = criterion_KD()
                 loss = 0.15 * loss_student + 0.85 * loss_kd
-                # loss = 0.99*loss_student + 0.01*loss_kd
+                # loss = 0.08*loss_student + 0.92*loss_kd
 
                 # print(loss_student) #
                 # print(loss_kd) #
@@ -285,8 +285,9 @@ def train_model_kd(teacher_model, student_model, criterion_lr, optimizer_view, e
             # deep copy the model
             exp_lr_scheduler.step()
             last_model_weights = student_model.state_dict()
-            if epoch % 5 == 4:
-                utils.save_network_kd(student_model, opt.out_model_name, epoch)
+            # if epoch % 20 == 19:
+            #     utils.save_network_kd(student_model, opt.out_model_name, epoch)
+            utils.save_network_kd(student_model, opt.out_model_name, epoch)
 
         time_elapsed = time.time() - start_time
         print('Training complete in {:.0f}m {:.0f}s'.format(
@@ -390,7 +391,7 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
             if phase == 'train':
                 exp_lr_scheduler.step()
             last_model_weights = model.state_dict()
-            if epoch % 2 == 0:
+            if epoch % 10 == 0:
                 if opt.net_type == 'teacher':
                     utils.save_network_teacher(model, opt.out_model_name, epoch)
                 else:
@@ -495,8 +496,10 @@ if __name__ == '__main__':
             student_model, opt, start_epoch = opt_resume_student(opt)
         else:
             start_epoch = 0
-            student_model = simple_2CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
-                                       pool=opt.pool)
+            # student_model = simple_10CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
+            #                            pool=opt.pool)
+            student_model = simple_resnet_50(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
+                                        pool=opt.pool)
 
         # TODO:
         # start_epoch = 356
@@ -530,7 +533,7 @@ if __name__ == '__main__':
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
         train_model(student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
                     exp_lr_scheduler=exp_lr_scheduler, dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt,
-                    num_epochs=400)
+                    num_epochs=50)
     elif opt.net_type == 'kd':
         '''如果输入指定为知识蒸馏，则读取教师模型用作推理，读取学生模型用作训练'''
         teacher_model, _, _ = utils.load_network_teacher(opt.out_model_name, opt, RESNET101=False, RESNET152=True,
@@ -561,7 +564,7 @@ if __name__ == '__main__':
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
         train_model_kd(teacher_model, student_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
                        exp_lr_scheduler=exp_lr_scheduler,
-                       dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt, num_epochs=1000)
+                       dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt, num_epochs=280)
 
     # if not opt.resume:
     #     if not os.path.isdir(dir_name):
@@ -623,5 +626,5 @@ if __name__ == '__main__':
 
 # python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type kd --resume;
 
-
 # python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.1 --stride 2 --h 384  --w 384 --fp16 --net_type student;
+# python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.1 --stride 2 --h 384  --w 384 --fp16 --net_type kd --resume;

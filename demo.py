@@ -303,7 +303,7 @@ def visualize_result_graph_v3(street_img_path_v2, drone_img_path_list_v2, score_
 
 
 if __name__ == '__main__':
-    iscuda = False
+    iscuda = True
     is_demo1 = False
     # model = load_model_teacher()
 
@@ -311,20 +311,21 @@ if __name__ == '__main__':
     model = load_model(iscuda=iscuda)
 
     # # TODO: demo_v1: street_view -> different label drone_view
-    # street_img_path, drone_img_path_list = load_demo_imgdir(is_demo1=is_demo1)
-    # start_time = time.time()
-    # street_label, drone_label_list = predict_label(model,street_img_path, drone_img_path_list, iscuda=iscuda)
-    # visualize_result_graph(street_img_path, street_label, drone_img_path_list, drone_label_list,
-    #                        save_name='demo_v9.jpg')
-    # end_time = time.time()
-    # print(end_time-start_time)
-
-    model.classifier.classifier = nn.Sequential()
-    # # # # TODO: demo_v2: street_view -> different drone_view from true label building
-    street_img_path_v2, drone_img_path_list_v2 = load_demo_imgdir_v2(is_demo1=is_demo1)
+    street_img_path, drone_img_path_list = load_demo_imgdir(is_demo1=is_demo1)
     start_time = time.time()
-    score_list = compare_feature(model, street_img_path_v2, drone_img_path_list_v2, iscuda=iscuda)
+    street_label, drone_label_list = predict_label(model,street_img_path, drone_img_path_list, iscuda=iscuda)
     end_time = time.time()
     print(end_time-start_time)
+
+    # visualize_result_graph(street_img_path, street_label, drone_img_path_list, drone_label_list,
+    #                        save_name='demo_v9.jpg')
+
+    # model.classifier.classifier = nn.Sequential()
+    # TODO: demo_v2: street_viw -> different drone_view from true label building
+    # street_img_path_v2, drone_img_path_list_v2 = load_demo_imgdir_v2(is_demo1=is_demo1)
+    # start_time = time.time()
+    # score_list = compare_feature(model, street_img_path_v2, drone_img_path_list_v2, iscuda=iscuda)
+    # end_time = time.time()
+    # print(end_time-start_time)
     # visualize_result_graph_v2(street_img_path_v2, drone_img_path_list_v2, maxscore_num, save_name='demo_v4.jpg')
     # visualize_result_graph_v3(street_img_path_v2, drone_img_path_list_v2, score_list, save_name='demo_v10.jpg')

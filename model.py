@@ -195,12 +195,77 @@ class ft_net_resnet18(torch.nn.Module):
         # x = self.classifier(x)
         return x
 
+class ft_net_resnet50(torch.nn.Module):
+
+    def __init__(self, class_num, droprate=0.5, stride=2, init_model=None, pool='avg'):
+        super(ft_net_resnet50, self).__init__()
+        model_ft = torchvision.models.resnet50(pretrained=True)
+        # if stride == 1:
+        #     model_ft.layer4[0].downsample[0].stride = (1, 1)
+        #     model_ft.layer4[0].conv2.stride = (1, 1)
+
+        self.pool = pool
+        if pool == 'avg+max':
+            model_ft.avgpool2 = torch.nn.AdaptiveAvgPool2d((1, 1))
+            model_ft.maxpool2 = torch.nn.AdaptiveMaxPool2d((1, 1))
+        elif pool == 'avg':
+            model_ft.avgpool2 = torch.nn.AdaptiveAvgPool2d((1, 1))
+        elif pool == 'max':
+            model_ft.maxpool2 = torch.nn.AdaptiveMaxPool2d((1, 1))
+        self.model = model_ft
+
+        if init_model is not None:
+            self.model = init_model.model
+            self.pool = init_model.pool
+        # self.fc = torch.nn.Linear(in_features=1000, out_features=512)
+
+    def forward(self, x):
+        x = self.model.conv1(x)
+        x = self.model.bn1(x)
+        x = self.model.relu(x)
+        x = self.model.maxpool(x)
+        x = self.model.layer1(x)
+        x = self.model.layer2(x)
+        x = self.model.layer3(x)
+        x = self.model.layer4(x)
+        if self.pool == 'avg+max':
+            x1 = self.model.avgpool2(x)
+            x2 = self.model.maxpool2(x)
+            x = torch.cat((x1, x2), dim=1)
+            x = x.view(x.size(0), -1)
+        elif self.pool == 'avg':
+            x = self.model.avgpool2(x)
+            x = x.view(x.size(0), -1)
+        elif self.pool == 'max':
+            x = self.model.maxpool2(x)
+            x = x.view(x.size(0), -1)
+        # x = self.classifier(x)
+        return x
+
+
 
 class simple_resnet_18(nn.Module):
     def __init__(self, num_classes, droprate=0.5, stride=2, pool='avg'):
         super(simple_resnet_18, self).__init__()
         self.model_net = ft_net_resnet18(num_classes, stride=stride, pool=pool)
         self.classifier = ClassBlock(512, num_classes, droprate)
+
+    def forward(self, x, x2=None):
+        x = self.model_net(x)
+        y = self.classifier(x)
+        if x2 is None:
+            return y
+        else:
+            x2 = self.model_net(x2)
+            y2 = self.classifier(x2)
+            return y, y2
+
+
+class simple_resnet_50(nn.Module):
+    def __init__(self, num_classes, droprate=0.5, stride=2, pool='avg'):
+        super(simple_resnet_50, self).__init__()
+        self.model_net = ft_net_resnet50(num_classes, stride=stride, pool=pool)
+        self.classifier = ClassBlock(2048, num_classes, droprate)
 
     def forward(self, x, x2=None):
         x = self.model_net(x)
@@ -652,6 +717,21 @@ class ft_net_resnet152(torch.nn.Module):
     VGG19: 是否为VGG19网络
 '''
 
+class view_resnet18(torch.nn.Module):
+    def __init__(self, class_num, droprate=0.5, stride=2, pool='avg'):
+        super(view_resnet18, self).__init__()
+        self.model_net = ft_net_resnet18(class_num, stride=stride, pool=pool)
+        self.classifier = ClassBlock(512, class_num, droprate)
+
+    def forward(self, x, x2=None):
+        x = self.model_net(x)
+        y = self.classifier(x)
+        if x2 is None:
+            return y
+        else:
+            x2 = self.model_net(x2)
+            y2 = self.classifier(x2)
+            return y, y2
 
 class view_net(torch.nn.Module):
     def __init__(self, class_num, droprate=0.5, stride=2, pool='avg', share_weight=False, VGG19=False, RESNET152=True,
@@ -779,54 +859,73 @@ class simple_3CNN(nn.Module):
         return y
 
 
-class simple_res(nn.Module):
+class simple_10CNN(nn.Module):
     def __init__(self, num_classes, out_channels_simple=256, droprate=0.5, stride=2, pool='avg'):
-        super(simple_res, self).__init__()
+        super(simple_10CNN, self).__init__()
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=128, kernel_size=3, stride=stride, padding=1),
+            nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(16),
             nn.LeakyReLU(0.1),
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
         self.conv2 = nn.Sequential(
-            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=stride, padding=1),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(32),
             nn.LeakyReLU(0.1),
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
         self.conv3 = nn.Sequential(
-            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=stride, padding=1),
-            nn.BatchNorm2d(512),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(64),
             nn.LeakyReLU(0.1),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            # nn.MaxPool2d(kernel_size=2, stride=2),
         )
         self.conv4 = nn.Sequential(
-            nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=3, stride=stride, padding=1),
-            # nn.BatchNorm2d(1024),
-            # nn.LeakyReLU(0.1),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.1),
             # nn.MaxPool2d(kernel_size=2, stride=2),
         )
         self.conv5 = nn.Sequential(
-            nn.Conv2d(in_channels=1024, out_channels=512, kernel_size=3, stride=stride, padding=1),
-            # nn.BatchNorm2d(512),
-            # nn.LeakyReLU(0.1),
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.1),
             # nn.MaxPool2d(kernel_size=2, stride=2),
         )
         self.conv6 = nn.Sequential(
-            nn.Conv2d(in_channels=512, out_channels=256, kernel_size=3, stride=stride, padding=1),
-            # nn.BatchNorm2d(256),
-            # nn.LeakyReLU(0.1),
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.1),
             # nn.MaxPool2d(kernel_size=2, stride=2),
         )
         self.conv7 = nn.Sequential(
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=stride, padding=1),
-            nn.BatchNorm2d(256),
+            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(512),
             nn.LeakyReLU(0.1),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            # nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        self.conv8 = nn.Sequential(
+            nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(1024),
+            nn.LeakyReLU(0.1),
+            # nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        self.conv9 = nn.Sequential(
+            nn.Conv2d(in_channels=1024, out_channels=512, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.1),
+            # nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        self.conv10 = nn.Sequential(
+            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.1),
+            # nn.MaxPool2d(kernel_size=2, stride=2),
         )
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.classifier = ClassBlock(256, num_classes, droprate=droprate)
+        self.classifier = ClassBlock(512, num_classes, droprate=droprate)
 
     def forward(self, x):
-        x = self.conv1(x)
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
@@ -834,6 +933,9 @@ class simple_res(nn.Module):
         x = self.conv5(x)
         x = self.conv6(x)
         x = self.conv7(x)
+        x = self.conv8(x)
+        x = self.conv9(x)
+        x = self.conv10(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         y = self.classifier(x)
@@ -904,8 +1006,9 @@ if __name__ == '__main__':
     # print(o.shape)
     '''
 
-    net = simple_2CNN(num_classes=21, out_channels_simple=256, droprate=0.5, stride=2)
+    # net = simple_10CNN(num_classes=21, out_channels_simple=512, droprate=0.5, stride=2)
     # net = ResNet(block=BasicBlock, num_blocks=[1, 1, 1, 1], num_classes=256)
+    net = simple_resnet_50(num_classes=21)
     print(net)
     print("param size = %f MB" % count_parameters_in_MB(net))
 
