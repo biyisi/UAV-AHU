@@ -489,17 +489,17 @@ if __name__ == '__main__':
         exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
         train_model(teacher_model, criterion_lr=criterion_lr, optimizer_view=optimizer,
                     exp_lr_scheduler=exp_lr_scheduler, dataset_sizes=dataset_sizes, start_epoch=start_epoch, opt=opt,
-                    num_epochs=2)
+                    num_epochs=200)
     elif opt.net_type == 'student':
         '''如果输入指定网络类型为学生网络'''
         if opt.resume:
             student_model, opt, start_epoch = opt_resume_student(opt)
         else:
             start_epoch = 0
-            # student_model = simple_10CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
-            #                            pool=opt.pool)
-            student_model = simple_resnet_50(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
-                                        pool=opt.pool)
+            student_model = simple_2CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
+                                       pool=opt.pool)
+            # student_model = simple_resnet_50(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
+            #                             pool=opt.pool)
 
         # TODO:
         # start_epoch = 356

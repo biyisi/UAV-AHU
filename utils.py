@@ -259,8 +259,8 @@ def load_network_student(out_model_name, opt):
     opt = config_to_opt(config, opt)
 
     # TODO: 修改加载模型
-    # model = simple_10CNN(num_classes=opt.nclasses, droprate=opt.droprate, stride=opt.stride, pool=opt.pool)
-    model = simple_resnet_50(num_classes=opt.nclasses, droprate=opt.droprate, stride=opt.stride, pool=opt.pool)
+    model = simple_2CNN(num_classes=opt.nclasses, droprate=opt.droprate, stride=opt.stride, pool=opt.pool)
+    # model = simple_resnet_50(num_classes=opt.nclasses, droprate=opt.droprate, stride=opt.stride, pool=opt.pool)
 
     # load model
     if isinstance(epoch, int):
@@ -273,7 +273,7 @@ def load_network_student(out_model_name, opt):
     # save_filename = 'net_400.pth'
     # save_filename = 'net_600.pth'
     # save_filename = 'net_800.pth'
-    save_filename = 'net_010.pth'
+    # save_filename = 'net_010.pth'
 
     '''
     测试
