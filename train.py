@@ -22,7 +22,7 @@ matplotlib.use('agg')
 # print(torch.__version__)
 torch_version = torch.__version__
 
-# 指定训练的文件名
+# TODO： 指定训练的文件名，这里暂时都是view，然后手动设置view文件夹下面的数据集
 TRAIN_FILE_NAME = 'view'
 
 try:
@@ -391,7 +391,7 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
             if phase == 'train':
                 exp_lr_scheduler.step()
             last_model_weights = model.state_dict()
-            if epoch % 10 == 0:
+            if epoch % 2 == 0:
                 if opt.net_type == 'teacher':
                     utils.save_network_teacher(model, opt.out_model_name, epoch)
                 else:
@@ -406,6 +406,7 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
 
+    # opt.out_model_name = 'view'
     if opt.net_type == 'teacher':
         utils.save_network_teacher(model, opt.out_model_name, num_epochs)
     else:
@@ -428,6 +429,7 @@ def train_model(model, criterion_lr, optimizer_view, exp_lr_scheduler, dataset_s
 
 if __name__ == '__main__':
     opt = init_options()
+    # out_model_name = 'view'
     fp16, data_dir, out_model_name = init_parameter(opt)
     transform_train_list, data_transforms, image_datasets, dataloaders, dataset_sizes, class_names, use_gpu = load_data(
         opt)
@@ -496,6 +498,7 @@ if __name__ == '__main__':
             student_model, opt, start_epoch = opt_resume_student(opt)
         else:
             start_epoch = 0
+            # TODO： 这里指定用那个模型进行训练
             student_model = simple_2CNN(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
                                        pool=opt.pool)
             # student_model = simple_resnet_50(num_classes=len(class_names), droprate=opt.droprate, stride=opt.stride,
@@ -503,7 +506,7 @@ if __name__ == '__main__':
 
         # TODO:
         # start_epoch = 356
-
+        # 那这个就是./model/student/view
         dir_name = os.path.join('./model/student', out_model_name)
         if start_epoch >= 40:
             opt.lr = opt.lr * 0.1
@@ -511,6 +514,7 @@ if __name__ == '__main__':
         ignored_params = list(map(id, student_model.classifier.parameters()))
         base_params = filter(lambda p: id(p) not in ignored_params, student_model.parameters())
         optimizer = torch.optim.SGD([
+            # 上一行是设定特征提取层学习率为0.1，下一行设定特征提取层学习率为0，这里就是预训练模型不动特征提取层参数
             # {'params': base_params, 'lr': 0.1 * opt.lr},
             {'params': base_params, 'lr': 0},
             {'params': student_model.classifier.parameters(), 'lr': opt.lr}
@@ -626,5 +630,6 @@ if __name__ == '__main__':
 
 # python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.1 --stride 1 --h 384  --w 384 --fp16 --net_type kd --resume;
 
-# python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.1 --stride 2 --h 384  --w 384 --fp16 --net_type student;
+# 如果是训练预训练模型，学习率0.01就好了
+# python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.01 --stride 1 --h 384  --w 384 --fp16 --net_type student;
 # python train.py --out_model_name view --droprate 0.5 --batchsize 8 --lr 0.1 --stride 2 --h 384  --w 384 --fp16 --net_type kd --resume;

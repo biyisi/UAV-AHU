@@ -322,7 +322,7 @@ if __name__ == '__main__':
 
     if Acc_statistics:
         # model = load_train_model(opt, RESNET101=False, RESNET152=True, VGG19=False, VGG16=False)
-
+        # 加载模型
         model, _, _ = utils.load_network_student(opt.name, opt)
         model = model.eval()
         model = model.cuda()
@@ -338,6 +338,7 @@ if __name__ == '__main__':
             true_acc, P_avg, R_avg, F1_avg = compare_label(model, dataloaders[query_name], query_labels)
         # save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/teacher" + QUERY_NAME_DEFINE, true_acc, P_avg, R_avg,
         #             F1_avg)
+        # 这里没把数据来源-即模型名称标注清楚。存起来的数据其实没啥用，留着也可以
         save_to_txt(QUERY_NAME_DEFINE, os.path.curdir + "/data/student" + QUERY_NAME_DEFINE, true_acc, P_avg, R_avg,
                     F1_avg)
         print("true_acc=%s, P_avg=%s, R_avg=%s, F1_avg=%s" % (true_acc, P_avg, R_avg, F1_avg))
@@ -353,7 +354,7 @@ if __name__ == '__main__':
         # mat_name = "CNN_100+_6798_"+QUERY_NAME_DEFINE + ".mat"
         # mat_name = "logits_159_" + QUERY_NAME_DEFINE + ".mat"
         # mat_name = "test_conv_159_"+QUERY_NAME_DEFINE + ".mat"
-        mat_name = "test_4CNN_159_200+train_" + QUERY_NAME_DEFINE + ".mat"
+        mat_name = "test" + QUERY_NAME_DEFINE + ".mat"
         result_mat = save_matlab(query_features=query_features, query_labels=query_labels, query_paths=query_paths,
                                  mat_name=mat_name)
         os.system("python evaluate_gpu_1_ctx.py")
@@ -397,7 +398,7 @@ Recall@1:91.82 Recall@5:96.23 Recall@10:100.00 Recall@top1:95.60 AP:45.61
 
 
 
-net_999.pth(ST):
+net_999.pth(400+train_KD_ST):
 true_acc=0.9622641509433962, P_avg=0.9651848866236739, R_avg=0.962468671679198, F1_avg=0.9625454739681387
 Recall@1:92.45 Recall@5:98.11 Recall@10:100.00 Recall@top1:97.48 AP:54.09
 '''
@@ -445,9 +446,9 @@ Recall@1:91.19 Recall@5:97.48 Recall@10:98.74 Recall@top1:96.86 AP:53.39
 true_acc=0.8616352201257862, P_avg=0.8688042186571598, R_avg=0.8619517543859648, F1_avg=0.8623239082694406
 
 # 2CNN_300+train_st
-net_619.pth
-Recall@1:94.34 Recall@5:98.11 Recall@10:98.74 Recall@top1:98.11 AP:51.17
-true_acc=0.9308176100628931, P_avg=0.9410943223443223, R_avg=0.9324404761904762, F1_avg=0.9317752866864745
+net_046.pth
+Recall@1:94.97 Recall@5:97.48 Recall@10:99.37 Recall@top1:96.86 AP:52.78
+true_acc=0.9371069182389937, P_avg=0.9419082125603865, R_avg=0.937734962406015, F1_avg=0.9375461309671835
 
 '''
 
@@ -545,9 +546,9 @@ true_acc=0.8616352201257862, P_avg=0.8688042186571598, R_avg=0.8619517543859648,
 
 
 # 2CNN_300+train_st
-net_619.pth
-Recall@1:94.34 Recall@5:98.11 Recall@10:98.74 Recall@top1:98.11 AP:51.17
-true_acc=0.9308176100628931, P_avg=0.9410943223443223, R_avg=0.9324404761904762, F1_avg=0.9317752866864745
+net_046.pth
+Recall@1:94.97 Recall@5:97.48 Recall@10:99.37 Recall@top1:96.86 AP:52.78
+true_acc=0.9371069182389937, P_avg=0.9419082125603865, R_avg=0.937734962406015, F1_avg=0.9375461309671835
 
 # 2CNN_300+train_logits
 net_364.pth

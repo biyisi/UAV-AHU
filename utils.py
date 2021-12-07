@@ -247,6 +247,7 @@ def load_student_infer_model(opt):
 def load_network_student(out_model_name, opt):
     # Load config, 获取最后的epoch和网络名称
     dirname = os.path.join('./model/student', out_model_name)
+    # /model/student/view out_model_name=view
     last_model_name = os.path.basename(get_model_list(dirname, 'net'))
     epoch = last_model_name.split('_')[1]
     epoch = epoch.split('.')[0]
@@ -276,10 +277,11 @@ def load_network_student(out_model_name, opt):
     # save_filename = 'net_010.pth'
 
     '''
-    测试
+    测试，这里直接指定模型的名称
     '''
-    # save_filename = 'net_215.pth'
-
+    save_filename = 'net_046.pth'
+    # 这里制定了存放的路径，比如就是./model/student/view/net_010.pth
+    # 这里的加载模型需要和上面的model对应
     save_path = os.path.join('./model/student', out_model_name, save_filename)
     print('Load the model from %s' % save_path)
     network = model
@@ -325,6 +327,7 @@ def save_network_teacher(network, dirname, epoch_label):
 
 
 def save_network_student(network, dirname, epoch_label):
+    # dirname = 'view'
     if not os.path.isdir('./model/student' + dirname):
         os.mkdir('./model/student' + dirname)
     if isinstance(epoch_label, int):

@@ -80,7 +80,8 @@ if __name__ == '__main__':
     # result = scipy.io.loadmat('satellite->drone.mat')
     # result = scipy.io.loadmat('drone->satellite_new.mat')
 
-    result_logits_view = scipy.io.loadmat('test_4CNN_159_200+train_label_view.mat')
+    # 设定mat文件存放名称，和test中保存的对应
+    result_logits_view = scipy.io.loadmat('testlabel_view.mat')
     logits_feature = torch.FloatTensor(result_logits_view['query_feature'])
     logits_feature.cuda()
     logits_label = result_logits_view['query_label'][0]
