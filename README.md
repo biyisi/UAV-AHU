@@ -1,5 +1,6 @@
 # PycharmProjects
 
-相关数据集正在打包上传，稍后将以百度网盘链接的形式更新
+uav-ahu dataset:
+链接: https://pan.baidu.com/s/1YgSffv4o7Kp3VQ29ZVAk5w 提取码: 5vbv
 
-The relevant data set is being packaged and uploaded, and will be updated in the form of a link to the Baidu network disk later 
+if not work please send email to xtcbiyisi@163.com
