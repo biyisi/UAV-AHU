@@ -11,12 +11,14 @@ This data set uses the DJI Mavic series drones, which were taken on the Qingyuan
 if not work please send email to xtcbiyisi@163.com
 
 ## Instruction manual
+The environment used in this article has no special requirements, just install the corresponding basic dependency package according to the import requirements 
+
 1. Create a new data folder to store datasets, and a new model folder to store network models
 2. The default data set location is ./data/teacher/view/ and ./data/student/view, and the default model location is ./model/view
 3. The model definition file is model.py. The model used in the experiment is set in the text. Please note that the models and model files loaded for training, retraining, distillation training, and testing are consistent. The specific definitions are indicated in the code in the form of comments. The specific function to load the existing model is in utils.py
 4. Please ensure that the name of the .mat file loaded in evaluate_gpu_1_ctx.py is consistent with the name of the .mat file saved in test.py
 5. Basic training, retraining, and distillation python instructions are provided at the end of the train.py file for reference 
 
+
+
 The function code has been modularized and can be searched in the file as needed. If there is something unclear, you can send an e-mail consultation 
-
-
